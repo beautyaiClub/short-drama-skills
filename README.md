@@ -257,7 +257,7 @@ Lena（朝沙脊上喊，短）：Now.
 |---|---|---|
 | `short-drama-script/scripts/init_project.py` | 建项目骨架：目录（含 `交付/`、`审查/`）＋ 四份支持文档 ＋ 第一集集头模板；已存在的文件跳过不覆盖 | `--title <剧名>`（必填）、`--english-name`、`--episodes` |
 | `short-drama-script/scripts/build_derived_docs.py` | 从正本重建派生件（分集场次表／台词对照本），保留已有中文并列出缺中文条目 | `--check` 只体检不写、`--only sheet\|reference` 只重建一份、`--props a,b` 扩充物件关键词 |
-| `short-drama-script/scripts/pack_delivery.py` | 打包到 `交付/`：正本＋支持文档＋`审查/`；显式 UTF-8 文件名标记、逐文件回读比对字节、SHA-256、同名不覆盖 | `--label r2`、`--name`、`--out`、`--no-audit`、`--dry-run` |
+| `short-drama-script/scripts/pack_delivery.py` | 打包到 `交付/`：正本＋支持文档（全局设定／大纲／对照本／场次表／交付说明／改动清单）＋`审查/`；显式 UTF-8 文件名标记、逐文件回读比对字节、SHA-256、同名不覆盖 | `--label r2`、`--name`、`--out`、`--no-audit`、`--dry-run` |
 | `short-drama-script/scripts/migrate_header.py` | 把老排法的集头区迁移成现行标准（第一行只留剧名·英文名、概要块提到集头块上面、集头块单独写 `第 N 集：<集名>`）；写盘前备份到 `备份-集头整改-<日期>/`，写盘后复验场数与台词数 | `--dry-run` |
 | `short-drama-script-audit/scripts/audit_plain_script.py` | 机械校验＋项目与交付检查；有 FAIL 时退出码 1，可直接当门禁 | `--json 审查/机械校验.json`、`--strict`（WARN 也算失败） |
 

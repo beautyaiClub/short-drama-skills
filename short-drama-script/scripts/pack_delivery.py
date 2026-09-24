@@ -76,7 +76,7 @@ def collect(project: Path, title: str, with_audit: bool):
     for pat in (f"{title}-全局设定.txt", "*整体大纲*.txt", "*台词对照*.txt",
                 f"{title}-分集场次表.txt", "*分集场次表.txt", "*分集表*.txt",
                 f"{title}-交付说明.txt", "*交付说明*.txt", "*故事概要*.txt",
-                "*制作形态卡*.txt", f"{title}-*.txt"):
+                "*制作形态卡*.txt", "*改动清单*.txt", f"{title}-*.txt"):
         for p in project.glob(pat):
             if p.is_file() and p not in files and "台词中文映射" not in p.name:
                 files.append(p)
