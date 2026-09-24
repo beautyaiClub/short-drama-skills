@@ -1,3 +1,7 @@
 .DS_Store
 __pycache__/
 *.pyc
+# 凭证类文件一律不进仓库（防御性兜底）
+.git-credentials
+*.token
+*.pat

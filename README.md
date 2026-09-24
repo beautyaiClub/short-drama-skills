@@ -390,4 +390,40 @@ git push -u origin main
 注意：走 HTTPS 推送时，**fine-grained PAT 必须勾上 Repository permissions → Contents: Read and write**
 （只有 read 权限时 `git ls-remote` 能过、`git push` 会报
 `403 … denied`，API 侧报 `Resource not accessible by personal access token`）。
-推完不要在 `.git/config` 里留 token：用 `credential.helper` 或 `GIT_ASKPASS` 临时提供即可。
+推完不要在 `.git/config` 里留 token。
+
+### 凭证怎么存（两选一）
+
+**方案 A：钥匙串**（推荐，只在图形界面终端里有效）。必须让 **git 自己**写进去——它存的是
+*互联网密码*（`srvr=github.com`），而 `security add-generic-password` 存的是*通用密码*（`svce=github.com`），
+git 读不到后者，会一直报 `could not read Username`。
+
+```bash
+# 让 git 问一次并自动存好（用户名填 x-access-token，密码粘 token）
+git push --dry-run origin main
+
+# 自检：能看到 srvr=github.com 才算成功
+security find-internet-password -s github.com | head -5
+```
+
+**方案 B：凭证文件**（在 SSH／tmux／无 GUI 会话里也管用，代价是明文磁盘存储）：
+
+```bash
+git config --global credential.helper ''   # 复位 helper 链（清掉系统级的 osxkeychain）
+git config --global --add credential.helper store
+umask 077
+printf 'https://x-access-token:<你的token>@github.com\n' > ~/.git-credentials
+chmod 600 ~/.git-credentials
+```
+
+`~/.git-credentials` 在仓库目录之外；本仓库的 `.gitignore` 也已把 `.git-credentials`、`*.token`、`*.pat`
+列为忽略，防止误拷进来。任何时候都不要把 token 写进 SKILL.md、references 或任何会提交的文件。
+
+### 推送报错对照
+
+| 报错 | 原因 | 处理 |
+|---|---|---|
+| `403 … denied to <user>` | PAT 没有写权限 | token 勾上 Contents: Read and write |
+| `Resource not accessible by personal access token` | 同上（API 侧） | 同上 |
+| `could not read Username` | git 找不到可用凭证：钥匙串里存的是通用密码，或根本没存 | 用方案 A 让 git 自己存，或改方案 B |
+| `failed to store: -25308` | 当前会话没有钥匙串交互权限（SSH／tmux／后台） | 换图形界面终端，或改方案 B |
