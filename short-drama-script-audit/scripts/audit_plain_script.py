@@ -28,20 +28,25 @@ from pathlib import Path
 
 TIMES = ("日", "昏", "夜", "晨")
 IOS = ("内", "外")
+# 发声标签（开口的无名角色）由**项目**声明，不写死在脚本里——
+# 放在 `<剧名>-发声标签.txt`（一行一个），或《全局设定》里的「发声标签：甲、乙、丙」一行。
+# 下面这组只是老项目的兜底默认值（v1 时代硬编码在这里），项目声明会与之取并集。
 GROUP_SUFFIX = "群像"
-ANON_SPEAKERS = {
+BUILTIN_LABELS = {
     "掠夺者", "掠夺者甲", "掠夺者乙", "掠夺者丙", "掠夺者守卫", "掠夺者随从",
     "掠夺者杀手", "掠夺者搜索队", "护卫", "杀手", "守卫", "女战士", "营地女战士",
     "那个女战士", "首领", "军官", "领头的", "军官甲", "人群", "孩子", "孩子们",
     "获救的人", "被掳的人", "未知",
 }
+LABEL_FIELD_RE = re.compile(r"^\s*发声标签\s*[：:]\s*(.+)$", re.M)
 VEHICLE_SUFFIX = ("车", "之王", "闸门", "吊闸", "水塔", "装置", "电台")
 OLD_FIELDS = ("镜号", "景别：", "景别:", "机位", "焦段", "时长：", "时长:",
               "画面：", "声音：", "衔接：", "运镜：", "镜头")
 LIGHT_HINT = ("火", "灯", "月", "炉", "盆", "炭", "焰", "焊枪", "光")
 TIME_CARRIER = ("天刚亮", "天快亮", "天将亮", "天亮了", "天亮", "天黑", "天已黑",
-                "天已经黑", "天完全黑", "入夜", "夜里", "夜，", "黄昏", "日落",
-                "日头", "正午", "中午", "下午", "早上", "早晨", "白天", "斜光",
+                "天已经黑", "天完全黑", "天擦黑", "天快黑", "入夜", "夜里", "夜，",
+                "黄昏", "傍晚", "日落", "日头", "正午", "中午", "上午", "下午",
+                "早上", "早晨", "大清早", "白天", "斜光",
                 "月光", "后半夜", "整夜", "两天之后", "半天过去", "太阳", "次日",
                 "天刚黑", "黑透", "天黑之后")
 # 只认"声源不在画面里"的词：设备名（无线电／电台／电话）不算——
@@ -91,10 +96,10 @@ def find_episodes(project: Path):
 
 
 def parse_settings(project: Path):
-    """返回 (场景母名→子视图集合, 人物集合, 物品集合, 是否有资产表)。"""
+    """返回 (场景母名→子视图集合, 人物集合, 物品集合, 是否有资产表, 发声标签集合)。"""
     cands = list(project.glob("*全局设定*.txt"))
     if not cands:
-        return {}, set(), set(), False
+        return {}, set(), set(), False, set(BUILTIN_LABELS)
     text = read(cands[0])
     scenes = {}
     for m in re.finditer(r"^(S\d+)\s+(\S+?)｜子视图：(.+)$", text, re.M):
@@ -102,11 +107,40 @@ def parse_settings(project: Path):
         scenes[m.group(2)] = {x.strip() for x in re.split(r"\s*/\s*", subs) if x.strip()}
     people = {m.group(1).strip() for m in re.finditer(r"^CH-\d+\s+([^｜（\n]+)", text, re.M)}
     props = {m.group(1).strip() for m in re.finditer(r"^PR-\d+\s+([^｜（\n]+)", text, re.M)}
-    return scenes, people, props, True
+    return scenes, people, props, True, load_speaker_labels(project, text)
 
 
-def split_scenes(text: str, ep_no: int):
-    """切场。body 收**全部非对白行**（含续行），对白单独存。"""
+def load_speaker_labels(project: Path, settings_text: str = "") -> set:
+    """发声标签：`<剧名>-发声标签.txt`（一行一个，`#` 起注释）或《全局设定》里的
+    「发声标签：甲、乙、丙」一行。项目声明与内置兜底取并集。"""
+    labels = set(BUILTIN_LABELS)
+    for f in project.glob("*发声标签*.txt"):
+        for line in read(f).split("\n"):
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            for x in re.split(r"[、,，]", s):
+                if x.strip():
+                    labels.add(x.strip())
+    if settings_text:
+        m = LABEL_FIELD_RE.search(settings_text)
+        if m:
+            for x in re.split(r"[、,，]", m.group(1)):
+                if x.strip():
+                    labels.add(x.strip())
+    return labels
+
+
+HEADER_KEYS = ("本集概要", "本集大场面", "本集人物", "本集场景", "人物：")
+
+
+def split_scenes(text: str, ep_no: int, known=frozenset()):
+    """切场。body 收**全部非对白行**（含续行），对白单独存。
+
+    `known` = 资产表人物 ＋ 发声标签。**没有语气提示的对白行也要认出来**——
+    标准要求每句带提示，但解析器不能因为缺提示就把台词当正文（那样台词账会少一半，
+    说明文字的"他／她"检查还会误报）。识别出来后在 check_episode 里记 WARN。
+    """
     scenes, cur = [], None
     for raw in text.split("\n"):
         s = raw.strip()
@@ -126,8 +160,15 @@ def split_scenes(text: str, ep_no: int):
         if d:
             cur["dlg"].append({"sp": d.group(1).strip(), "cue": d.group(2).strip(),
                                "vo": bool(d.group(3)), "text": d.group(4).strip(),
-                               "line": cur["line"]})
+                               "line": cur["line"], "no_cue": False})
             continue
+        if s and not s.startswith(("【", "△", "▲")) and not s.startswith(HEADER_KEYS):
+            l = LOOSE_DLG_RE.match(s)
+            if l and l.group(1).strip() in (set(cur["people"]) | set(known)):
+                cur["dlg"].append({"sp": l.group(1).strip(), "cue": (l.group(2) or "").strip(),
+                                   "vo": bool(l.group(3)), "text": l.group(4).strip(),
+                                   "line": cur["line"], "no_cue": not l.group(2)})
+                continue
         if not s or TITLE_RE.match(s) or EP_LABEL_RE.match(s) or \
                 s.startswith(("【", "(", "（", "本集", "━", "┈", "=", "—")):
             continue
@@ -135,7 +176,8 @@ def split_scenes(text: str, ep_no: int):
     return scenes
 
 
-def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: list, flags=None):
+def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: list, flags=None,
+                  labels=frozenset()):
     text = read(path)
     lines = [l.strip() for l in text.split("\n")]
     name = path.name
@@ -181,7 +223,7 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
         if "他" in s or "她" in s:
             add("FAIL", "-", "他她代词", f"L{i}：{s[:56]}")
 
-    scenes = split_scenes(text, ep_no)
+    scenes = split_scenes(text, ep_no, set(people) | set(labels))
     if not scenes:
         add("FAIL", "-", "场标题", "没有解析到任何场标题")
         return scenes
@@ -219,12 +261,19 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
             raw = p.replace(" [VO]", "").strip()
             if any(c in p for c in "（）") or "；" in p:
                 add("FAIL", sc["id"], "人物行写法", f"「{p}」带中文注释或分号")
+            if raw in labels:
+                add("WARN", sc["id"], "发声标签写进了人物行",
+                    f"「{raw}」是发声标签，按规范只出现在对白行；人物行写承载它的群像名")
             if raw.endswith(VEHICLE_SUFFIX) or raw in props:
                 add("FAIL", sc["id"], "载具进人物行", f"「{raw}」是资产不是人物")
-            elif has_assets and raw not in people and GROUP_SUFFIX not in raw and raw not in ANON_SPEAKERS:
+            elif has_assets and raw not in people and GROUP_SUFFIX not in raw and raw not in labels:
                 add("WARN", sc["id"], "人物不在人物表", f"「{raw}」")
         for d in sc["dlg"]:
-            if d["sp"] in ANON_SPEAKERS or GROUP_SUFFIX in d["sp"]:
+            if d.get("no_cue"):
+                add("WARN", sc["id"], "对白行缺语气提示",
+                    f"「{d['sp']}：{d['text'][:24]}」没有（语气或策略提示）；"
+                    f"解析器已按对白处理，但配音拿不到表演依据")
+            if d["sp"] in labels or GROUP_SUFFIX in d["sp"] or d["sp"] in base_names:
                 continue
             if has_assets and d["sp"] not in base_names:
                 add("FAIL", sc["id"], "说话人不在人物行", f"「{d['sp']}」未写进本场人物行")
@@ -282,7 +331,7 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
     return scenes
 
 
-def project_check(project: Path, eps, has_assets: bool, sheet_rows, out):
+def project_check(project: Path, eps, has_assets: bool, sheet_rows, out, labels=frozenset(), people=frozenset()):
     """P 类：项目与交付层——支持文档、派生件同步、审查与交付目录、两份标准是否同源。"""
     def add(level, kind, msg):
         out.append({"level": level, "file": "-", "scene": "-", "kind": kind, "msg": msg})
@@ -296,6 +345,20 @@ def project_check(project: Path, eps, has_assets: bool, sheet_rows, out):
     for name, cands in docs.items():
         if not cands:
             add("WARN", "支持文档缺失", f"没有找到《{name}》")
+    if any("发声标签" in p.name for p in project.glob("*发声标签*.txt")):
+        pass
+    else:
+        gm = project.glob("*全局设定*.txt")
+        has_field = any(LABEL_FIELD_RE.search(read(p)) for p in gm)
+        if not has_field and not (labels - BUILTIN_LABELS):
+            add("INFO", "发声标签表",
+                "项目没有声明发声标签（`<剧名>-发声标签.txt` 或《全局设定》的「发声标签：…」行）；"
+                "开口的无名角色沿用内置兜底表，跨题材项目建议显式声明")
+    overlap = sorted(set(labels) & set(people) - set(BUILTIN_LABELS))
+    if overlap:
+        add("WARN", "标签与资产重名",
+            f"{'、'.join(overlap[:8])}{'…' if len(overlap) > 8 else ''} 同时是发声标签与 CH 资产；"
+            f"按规范标签只出现在对白行，资产表里不该有它们——二选一")
     if not has_assets:
         add("WARN", "缺资产命名表",
             "没有《*全局设定*.txt》：场景／人物／道具校验已降级，结论最高只能写 PROVISIONAL")
@@ -387,14 +450,14 @@ def main() -> int:
         print("没有找到 第N集.txt 正本", file=sys.stderr)
         return 1
 
-    wl, people, props, has_assets = parse_settings(project)
+    wl, people, props, has_assets, labels = parse_settings(project)
     out = []
     script_lines = []
     sheet_rows = []
     flags = {}
     total_scenes = 0
     for ep_no, path in eps:
-        scs = check_episode(ep_no, path, wl, people, props, has_assets, out, flags)
+        scs = check_episode(ep_no, path, wl, people, props, has_assets, out, flags, labels)
         total_scenes += len(scs)
         for sc in scs:
             script_lines += [d["text"] for d in sc["dlg"]]
@@ -407,7 +470,7 @@ def main() -> int:
                            f"第一行只留「<剧名> · <英文名>」，概要块提到集头块上面，"
                            f"集头块单独写「第 N 集：<集名>」＋语言声明"})
     rebuild_check(project, script_lines, out)
-    project_check(project, eps, has_assets, sheet_rows, out)
+    project_check(project, eps, has_assets, sheet_rows, out, labels, people)
 
     fails = [f for f in out if f["level"] == "FAIL"]
     warns = [f for f in out if f["level"] == "WARN"]

@@ -249,7 +249,7 @@ def rebuild_reference(title: str, english: str, eps, project: Path, cn_map: dict
         epnames[n] = ep_name
 
     out = [f"{title}" + (f" · {english}" if english else "") + f" · 台词对照本（全 {len(eps)} 集）",
-           "英文为正文原句，中文为大意，仅用于审稿；人名一律用英文。",
+           "第一列为正文原句（目标语言；列名沿用 EN｜），第二列为中文大意，仅用于审稿与配音。",
            "场标与集内编号与《第 N 集.txt》一致。", ""]
     last = None
     for x in items:
