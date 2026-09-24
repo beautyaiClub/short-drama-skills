@@ -48,12 +48,14 @@ TIME_CARRIER = ("天刚亮", "天快亮", "天将亮", "天亮了", "天亮", "�
 # 角色当场对着无线电说话时人是看得见的，标了 [VO] 反而错。
 VO_HINT = ("喇叭", "画外", "传来", "传过来", "从谷外", "从远处", "从射程外",
            "从车窗", "录音", "广播")
-VO_NEG = ("没有回", "没回", "不回", "没有回答")   # "Sera（没有回喇叭）" 这类是现场反应，不算场外声
+VO_NEG = ("没有回", "没回", "不回", "没有回答")   # "Lena（没有回喇叭）" 这类是现场反应，不算场外声
 MIN_DIALOGUE = 50
 DUP_MIN_CHARS = 12
 
 SCENE_RE = re.compile(r"^【(\d+)-(\d+)\s+(\S+)\s+(\S+)\s+(.+)】$")
 DLG_RE = re.compile(r"^(.+?)（(.+?)）(\[VO\])?：(.+)$")
+# 集标题行（`<剧名> · <英文名> · 第 N 集：<集名>`）；不同项目的剧名不同，按形状认，不写死剧名。
+TITLE_RE = re.compile(r"^.+ · .+ · 第 ?[0-9一二三四五六七八九十]+ ?集")
 LOOSE_DLG_RE = re.compile(r"^(.+?)(?:（(.*?)）)?(\[VO\])?：(.+)$")
 CN_NUM = {"零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6,
           "七": 7, "八": 8, "九": 9, "十": 10}
@@ -122,7 +124,7 @@ def split_scenes(text: str, ep_no: int):
                                "vo": bool(d.group(3)), "text": d.group(4).strip(),
                                "line": cur["line"]})
             continue
-        if not s or s.startswith(("【", "狂沙", "(", "（", "本集", "━", "┈", "=", "—")):
+        if not s or TITLE_RE.match(s) or s.startswith(("【", "(", "（", "本集", "━", "┈", "=", "—")):
             continue
         cur["body"].append(s)
     return scenes
@@ -179,7 +181,7 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
         base, _, sub = sc["loc"].partition("·")
         if base.startswith("PR-"):
             if not sub:
-                add("WARN", sc["id"], "载具取景缺子视图", f"「{sc['loc']}」建议写成 PR-01 巨车·货舱 这类")
+                add("WARN", sc["id"], "载具取景缺子视图", f"「{sc['loc']}」建议写成 PR-01 拖船·驾驶舱 这类")
         elif has_assets:
             if base not in wl:
                 add("WARN", sc["id"], "场景不在资产表", f"「{base}」")
@@ -213,7 +215,7 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
             for nm in people:
                 if nm in body and nm not in base_names:
                     add("WARN", sc["id"], "正文有人未列（需人工确认）",
-                        f"正文出现「{nm}」，本场人物行没有；若是物主（X 的车）或不在此处（Mira 不在这里）请忽略")
+                        f"正文出现「{nm}」，本场人物行没有；若是物主（X 的车）或不在此处（某人不在这里）请忽略")
 
     # M11 场外声缺 [VO]
     for sc in scenes:

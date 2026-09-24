@@ -11,7 +11,7 @@
 
 用法：
     python3 pack_delivery.py <项目目录>
-    python3 pack_delivery.py <项目目录> --label r2 --name 狂沙-WASTELAND-第一季
+    python3 pack_delivery.py <项目目录> --label r2 --name 寂海-SILENT SEA-第一季
     python3 pack_delivery.py <项目目录> --dry-run     # 只列清单，不写文件
 """
 

@@ -4,7 +4,7 @@
 生成目录结构 ＋ 四份支持文档 ＋ 第一集集头模板。已存在的文件一律跳过，不覆盖。
 
 用法：
-    python3 init_project.py <项目目录> --title 黑戒 --episodes 13
+    python3 init_project.py <项目目录> --title 寂海 --episodes 12
     python3 init_project.py ./新剧 --title 新剧 --english-name NEON ASH --episodes 12
 """
 
