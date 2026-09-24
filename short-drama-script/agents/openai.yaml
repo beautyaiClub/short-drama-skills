@@ -1,0 +1,4 @@
+interface:
+  display_name: "短剧剧本写作"
+  short_description: "场次本写作、项目骨架、派生件生成与交付打包"
+  default_prompt: "用 $short-drama-script 写这个短剧项目：先按 references/format-spec.md 对齐格式与项目结构，再写/改指定集，最后跑 scripts/build_derived_docs.py 并在交付前用 scripts/pack_delivery.py 打包。"

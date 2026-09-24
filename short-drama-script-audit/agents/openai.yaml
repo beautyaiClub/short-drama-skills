@@ -1,0 +1,4 @@
+interface:
+  display_name: "短剧剧本审查"
+  short_description: "剧本规约、机械校验、连续性/接缝/台词审查、项目与交付审查"
+  default_prompt: "用 $short-drama-script-audit 审查这个短剧剧本项目：先跑 scripts/audit_plain_script.py，再按 references/audit-checklist.md 与 review-ledger.md 给结论与修订清单。"
