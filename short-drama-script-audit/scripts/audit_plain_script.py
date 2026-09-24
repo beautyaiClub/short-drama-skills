@@ -56,6 +56,10 @@ SCENE_RE = re.compile(r"^【(\d+)-(\d+)\s+(\S+)\s+(\S+)\s+(.+)】$")
 DLG_RE = re.compile(r"^(.+?)（(.+?)）(\[VO\])?：(.+)$")
 # 集标题行（`<剧名> · <英文名> · 第 N 集：<集名>`）；不同项目的剧名不同，按形状认，不写死剧名。
 TITLE_RE = re.compile(r"^.+ · .+ · 第 ?[0-9一二三四五六七八九十]+ ?集")
+# 集头块行（现行标准：`第 N 集：<集名>`，单独一行）
+EP_LABEL_RE = re.compile(r"^第\s*[0-9一二三四五六七八九十]+\s*集\s*[：:]\s*.+")
+# 集号写在第一行里的老排法（不锚定，用于识别 `剧名 · 英文名 · 第 N 集：<集名>`）
+EP_INLINE_RE = re.compile(r"第\s*[0-9一二三四五六七八九十]+\s*集\s*[：:]\s*.+")
 LOOSE_DLG_RE = re.compile(r"^(.+?)(?:（(.*?)）)?(\[VO\])?：(.+)$")
 CN_NUM = {"零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6,
           "七": 7, "八": 8, "九": 9, "十": 10}
@@ -124,13 +128,14 @@ def split_scenes(text: str, ep_no: int):
                                "vo": bool(d.group(3)), "text": d.group(4).strip(),
                                "line": cur["line"]})
             continue
-        if not s or TITLE_RE.match(s) or s.startswith(("【", "(", "（", "本集", "━", "┈", "=", "—")):
+        if not s or TITLE_RE.match(s) or EP_LABEL_RE.match(s) or \
+                s.startswith(("【", "(", "（", "本集", "━", "┈", "=", "—")):
             continue
         cur["body"].append(s)
     return scenes
 
 
-def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: list):
+def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: list, flags=None):
     text = read(path)
     lines = [l.strip() for l in text.split("\n")]
     name = path.name
@@ -138,14 +143,27 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
     def add(level, scene, kind, msg):
         out.append({"level": level, "file": name, "scene": scene, "kind": kind, "msg": msg})
 
-    # M1 集头块
-    head = "\n".join(lines[:40])
+    # M1 集头区（范围＝文件开头到第一场；现行排法里概要块在集头块上面，比 12 行更长）
+    head_end = next((i for i, s in enumerate(lines) if SCENE_RE.match(s.strip())), len(lines))
+    head_area = lines[:head_end]
+    head = "\n".join(head_area)
     for key in ("本集概要", "【本集大场面】", "本集人物：", "本集场景："):
         if key not in head:
             add("FAIL", "-", "集头缺块", f"缺「{key}」")
-    declaration = lines[1] if len(lines) > 1 else ""
-    if not re.search(r"台词[^）]*", declaration) or "（" not in declaration and "(" not in declaration:
-        add("WARN", "-", "语言声明", "第二行不是规范的语言声明")
+    decl = next((s for s in head_area
+                 if s.startswith(("(", "（")) and ("台词" in s or "对白" in s)), "")
+    if not decl:
+        add("WARN", "-", "语言声明", "集头区没找到语言声明行（括号开头、说明台词语言的那一行）")
+
+    # M1b 集头区顺序：文档头（剧名 · 英文名）→ 概要块 → 集头块（`第 N 集：<集名>` ＋ 语言声明）
+    first = lines[0].strip() if lines else ""
+    ep_idx = next((i for i, s in enumerate(head_area) if EP_LABEL_RE.match(s.strip())), None)
+    sum_idx = next((i for i, s in enumerate(head_area) if s.strip().startswith("本集概要")), None)
+    if EP_INLINE_RE.search(first):
+        if flags is not None:
+            flags.setdefault("old_header", []).append(name)
+    elif ep_idx is not None and sum_idx is not None and ep_idx < sum_idx:
+        add("WARN", "-", "集头顺序", "「第 N 集：<集名>」排在概要块前面；现行标准是先概要块、后集头块")
 
     # M2 旧格式字段
     for i, s in enumerate(lines, 1):
@@ -373,13 +391,21 @@ def main() -> int:
     out = []
     script_lines = []
     sheet_rows = []
+    flags = {}
     total_scenes = 0
     for ep_no, path in eps:
-        scs = check_episode(ep_no, path, wl, people, props, has_assets, out)
+        scs = check_episode(ep_no, path, wl, people, props, has_assets, out, flags)
         total_scenes += len(scs)
         for sc in scs:
             script_lines += [d["text"] for d in sc["dlg"]]
             sheet_rows.append((sc["id"], sc["time"], sc["io"], sc["loc"]))
+    if flags.get("old_header"):
+        fs = flags["old_header"]
+        out.append({"level": "WARN", "file": "-", "scene": "-",
+                    "kind": "集头顺序（老排法）",
+                    "msg": f"{len(fs)} 集仍把集号写在第一行（{fs[0]} 等）；现行标准："
+                           f"第一行只留「<剧名> · <英文名>」，概要块提到集头块上面，"
+                           f"集头块单独写「第 N 集：<集名>」＋语言声明"})
     rebuild_check(project, script_lines, out)
     project_check(project, eps, has_assets, sheet_rows, out)
 

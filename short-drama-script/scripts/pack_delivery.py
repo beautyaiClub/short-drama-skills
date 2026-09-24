@@ -50,25 +50,24 @@ def find_episodes(project: Path):
     return sorted(out)
 
 
-def detect_title(project: Path, eps):
+EP_LABEL_RE = re.compile(r"第\s*[0-9一二三四五六七八九十]+\s*集\s*[：:]\s*.+")
+
+
+def detect_names(project: Path, eps):
+    """从正本第一行取 (剧名, 英文名)，用于默认包名。
+
+    第一行只标作品：`<剧名> · <英文名>`。老排法也能读：
+    `<剧名> · <英文名> · 第 N 集：<集名>`、`<剧名> · 第 N 集：<集名>`。
+    """
     if eps:
-        first = eps[0][1].read_text(encoding="utf-8").splitlines()[0]
-        m = re.match(r"^\s*(.+?)\s*·", first)
-        if m:
-            return m.group(1).strip()
+        first = eps[0][1].read_text(encoding="utf-8").splitlines()[0].strip()
+        stripped = EP_LABEL_RE.sub("", first).strip(" 　·")
+        parts = [p.strip() for p in stripped.split("·") if p.strip()]
+        if parts:
+            return parts[0], (parts[1] if len(parts) > 1 else "")
     for cand in project.glob("*-全局设定.txt"):
-        return cand.name.split("-全局设定")[0]
-    return project.name
-
-
-def detect_english(project: Path, eps):
-    """从正本第一行 <剧名> · <英文名> · 第 N 集 里取英文名（用于默认包名）。"""
-    if eps:
-        first = eps[0][1].read_text(encoding="utf-8").splitlines()[0]
-        m = re.match(r"^\s*.+?\s*·\s*(.+?)\s*·\s*第", first)
-        if m:
-            return m.group(1).strip()
-    return ""
+        return cand.name.split("-全局设定")[0], ""
+    return project.name, ""
 
 
 def collect(project: Path, title: str, with_audit: bool):
@@ -106,12 +105,11 @@ def main() -> int:
     if not eps0:
         print("没有找到 第N集.txt 正本", file=sys.stderr)
         return 1
-    title = detect_title(project, eps0)
+    title, english0 = detect_names(project, eps0)
     eps, files = collect(project, title, not args.no_audit)
 
     day = dt.date.today().strftime("%Y%m%d")
-    english = detect_english(project, eps0)
-    head = f"{title}-{english}" if english else title
+    head = f"{title}-{english0}" if english0 else title
     base = args.name or f"{head}-第一季-全{len(eps)}集-{day}"
     zip_name = f"{base}-{args.label}.zip" if args.label else f"{base}.zip"
     out_dir = project / args.out

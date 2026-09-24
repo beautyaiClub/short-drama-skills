@@ -32,6 +32,7 @@ DEFAULT_PROPS = ["弓", "箭", "刀", "斧", "撬棍", "工具袋", "水囊", "�
 
 SCENE_RE = re.compile(r"^【(\d+)-(\d+)\s+(\S+)\s+(\S+)\s+(.+)】$")
 DLG_RE = re.compile(r"^(.+?)（(.+?)）(\[VO\])?：(.+)$")
+EP_LABEL_RE = re.compile(r"第\s*([0-9一二三四五六七八九十]+)\s*集\s*[：:]\s*(.+)")
 
 
 def cn2int(t: str) -> int:
@@ -55,35 +56,56 @@ def find_episodes(project: Path):
     return sorted(out)
 
 
-def detect_names(project: Path, eps):
-    """返回 (剧名, 英文名)。优先读正本第一行，其次看全局设定文件名。"""
-    if eps:
-        first = eps[0][1].read_text(encoding="utf-8").splitlines()[0]
-        m = re.match(r"^\s*(.+?)\s*·\s*(.+?)\s*·\s*第", first)
+def parse_header(lines):
+    """解析集头区：返回 (剧名, 英文名, 集标签, 集名, 概要块行)。
+
+    三种排法都认：
+      C（现行）第一行 `<剧名> · <英文名>`；中间概要块；之后 `第 N 集：<集名>` ＋ 语言声明
+      A（旧）  第一行 `<剧名> · <英文名> · 第 N 集：<集名>`；概要块在集头块下面
+      B（无英文名）第一行 `<剧名> · 第 N 集：<集名>`
+    """
+    first = lines[0].strip() if lines else ""
+    head, label, ep_name = [], "", ""
+    for i, raw in enumerate(lines):
+        s = raw.strip()
+        if SCENE_RE.match(s):
+            break
+        m = EP_LABEL_RE.match(s)
+        if m and not label:
+            label, ep_name = f"第 {m.group(1)} 集", m.group(2).strip()
+            continue
+        if not s or i == 0 or s.startswith(("(", "（")):
+            continue
+        head.append(raw)
+    stripped = EP_LABEL_RE.sub("", first).strip(" 　·")
+    parts = [p.strip() for p in stripped.split("·") if p.strip()]
+    title = parts[0] if parts else ""
+    english = parts[1] if len(parts) > 1 else ""
+    if not label:                      # 集号写在第一行里的老排法
+        m = EP_LABEL_RE.search(first)
         if m:
-            return m.group(1).strip(), m.group(2).strip()
-        return first.split("·")[0].strip(), ""
+            label, ep_name = f"第 {m.group(1)} 集", m.group(2).strip()
+    return title, english, label, ep_name, head
+
+
+def detect_names(project: Path, eps):
+    """返回 (剧名, 英文名)：优先读正本集头区，其次看全局设定文件名。"""
+    if eps:
+        title, english, _, _, _ = parse_header(
+            eps[0][1].read_text(encoding="utf-8").split("\n"))
+        if title:
+            return title, english
     for cand in project.glob("*-全局设定.txt"):
         return cand.name.split("-全局设定")[0], ""
     return project.name, ""
 
 
 def parse_episode(path: Path):
-    """返回 (head_lines, scenes)。scenes 里 body 收全部非对白行（含续行）。"""
+    """返回 (head_lines, scenes, meta)。scenes 里 body 收全部非对白行（含续行）。"""
     lines = path.read_text(encoding="utf-8").split("\n")
-    head, scenes, cur = [], [], None
-    k = 3
-    while k < len(lines):
-        t = lines[k].strip()
-        if t.startswith("【1-"):
-            break
-        if not t or (t.startswith("(") or t.startswith("（")):
-            k += 1
-            continue
-        if SCENE_RE.match(t):
-            break
-        head.append(lines[k])
-        k += 1
+    title, english, label, ep_name, head = parse_header(lines)
+    meta = {"title": title, "english": english, "label": label, "ep_name": ep_name}
+    scenes, cur = [], None
     for raw in lines:
         s = raw.strip()
         m = SCENE_RE.match(s)
@@ -105,7 +127,7 @@ def parse_episode(path: Path):
             continue
         if s:
             cur["body"].append(s)
-    return head, scenes
+    return head, scenes, meta
 
 
 def scene_props(sc: dict, props: list):
@@ -116,15 +138,12 @@ def scene_props(sc: dict, props: list):
 def build_sheet(title: str, english: str, eps, props: list) -> str:
     parsed = [(n, p, parse_episode(p)) for n, p in eps]
     epnames = {}
-    ep_titles = {}
-    for n, p, _ in parsed:
-        first = p.read_text(encoding="utf-8").splitlines()[0].strip()
-        ep_titles[n] = first
-        epnames[n] = first.split("：", 1)[1] if "：" in first else ""
-    total_scenes = sum(len(s) for _, _, (_, s) in parsed)
-    total_dlg = sum(sc["dlg"] for _, _, (_, s) in parsed for sc in s)
+    for n, _, (_, _, meta) in parsed:
+        epnames[n] = meta["ep_name"] or meta["label"]
+    total_scenes = sum(len(s) for _, _, (_, s, _) in parsed)
+    total_dlg = sum(sc["dlg"] for _, _, (_, s, _) in parsed for sc in s)
     tm, loc = Counter(), Counter()
-    for _, _, (_, scenes) in parsed:
+    for _, _, (_, scenes, _) in parsed:
         tm.update(sc["time"] for sc in scenes)
         loc.update(sc["loc"] for sc in scenes)
 
@@ -133,7 +152,7 @@ def build_sheet(title: str, english: str, eps, props: list) -> str:
          "　场号 ｜ 时间/内外 ｜ 场景（资产规范名）｜ 在场人物 ｜ 本场涉及的物件 ｜ 台词数",
          "　“在场人物”就是这一场必须出现在画面里的名单；群像代表未命名的同类角色。",
          "", "━" * 46, "【一】总览", "━" * 46]
-    for n, _, (_, scenes) in parsed:
+    for n, _, (_, scenes, _) in parsed:
         tc = Counter(sc["time"] for sc in scenes)
         ids = Counter(sc["loc"] for sc in scenes)
         dlg = sum(sc["dlg"] for sc in scenes)
@@ -148,10 +167,10 @@ def build_sheet(title: str, english: str, eps, props: list) -> str:
     for k, v in loc.most_common():
         L.append(f"　{v:>3} 场　{k}")
     L += ["", "━" * 46, "【三】逐集场次表", "━" * 46]
-    for n, _, (head, scenes) in parsed:
+    for n, _, (head, scenes, meta) in parsed:
         L += ["", "┈" * 46]
         L += head
-        L += ["┈" * 46, f"◆◆◆ {ep_titles[n]}", ""]
+        L += ["┈" * 46, f"◆◆◆ 第 {n} 集：{epnames[n]}", ""]
         for sc in scenes:
             pr = "、".join(scene_props(sc, props)) or "—"
             L.append(f"{sc['id']} ｜ {sc['time']} {sc['io']} ｜ {sc['loc']}")
@@ -226,8 +245,8 @@ def rebuild_reference(title: str, english: str, eps, project: Path, cn_map: dict
 
     epnames = {}
     for n, p in eps:
-        first = p.read_text(encoding="utf-8").splitlines()[0]
-        epnames[n] = first.split("：", 1)[1] if "：" in first else ""
+        _, _, _, ep_name, _ = parse_header(p.read_text(encoding="utf-8").split("\n"))
+        epnames[n] = ep_name
 
     out = [f"{title}" + (f" · {english}" if english else "") + f" · 台词对照本（全 {len(eps)} 集）",
            "英文为正文原句，中文为大意，仅用于审稿；人名一律用英文。",
