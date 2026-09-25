@@ -51,6 +51,12 @@ metadata:
 
    台词对照本的中文由已有稿保留、新句补齐；脚本会列出缺中文的条目。
 
+   `python3 scripts/estimate_duration.py <第N集.txt> --spec 90`　时长自查
+
+   报告这一集的正文/对白字数、可演动作条数、逐场并行折算与预计成片秒数。
+   时长口径与规格换算见 [references/timing-model.md](references/timing-model.md)；
+   **先在《全局设定》里写一行 `成片规格：单集 N 秒`**，审查脚本才会逐集校验篇幅。
+
 4. **自查门禁**：跑 `$short-drama-script-audit` 的
    `scripts/audit_plain_script.py <项目目录>`。FAIL 不为 0 不要往下走。
 

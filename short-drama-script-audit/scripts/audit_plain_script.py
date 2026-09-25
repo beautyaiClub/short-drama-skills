@@ -54,7 +54,10 @@ TIME_CARRIER = ("天刚亮", "天快亮", "天将亮", "天亮了", "天亮", "�
 VO_HINT = ("喇叭", "画外", "传来", "传过来", "从谷外", "从远处", "从射程外",
            "从车窗", "录音", "广播")
 VO_NEG = ("没有回", "没回", "不回", "没有回答")   # "Lena（没有回喇叭）" 这类是现场反应，不算场外声
-MIN_DIALOGUE = 50
+# 篇幅校验：按项目在《全局设定》里声明的成片规格反推（见 references/timing-model.md）。
+# 不再用写死的"台词 ≥50 句"——那时长口径是 11 分钟一集的题材，对 90 秒一集是错的。
+SPEC_RE = re.compile(r"成片规格[：:]\s*[^\n]*?(\d+)\s*秒")
+FIT_A, FIT_B = 15.0, 0.077        # 秒 ≈ A + B×正文字数（实测拟合）
 DUP_MIN_CHARS = 12
 
 SCENE_RE = re.compile(r"^【(\d+)-(\d+)\s+(\S+)\s+(\S+)\s+(.+)】$")
@@ -131,6 +134,16 @@ def load_speaker_labels(project: Path, settings_text: str = "") -> set:
     return labels
 
 
+def read_spec_seconds(project: Path):
+    """读《全局设定》里的「成片规格：单集 N 秒」，用于逐集校验篇幅。
+    没声明返回 None（只给 INFO 提示，不定级）。"""
+    for f in project.glob("*全局设定*.txt"):
+        m = SPEC_RE.search(read(f))
+        if m:
+            return int(m.group(1))
+    return None
+
+
 HEADER_KEYS = ("本集概要", "本集大场面", "本集人物", "本集场景", "人物：")
 
 
@@ -160,14 +173,14 @@ def split_scenes(text: str, ep_no: int, known=frozenset()):
         if d:
             cur["dlg"].append({"sp": d.group(1).strip(), "cue": d.group(2).strip(),
                                "vo": bool(d.group(3)), "text": d.group(4).strip(),
-                               "line": cur["line"], "no_cue": False})
+                               "line": cur["line"], "no_cue": False, "raw": s})
             continue
         if s and not s.startswith(("【", "△", "▲")) and not s.startswith(HEADER_KEYS):
             l = LOOSE_DLG_RE.match(s)
             if l and l.group(1).strip() in (set(cur["people"]) | set(known)):
                 cur["dlg"].append({"sp": l.group(1).strip(), "cue": (l.group(2) or "").strip(),
                                    "vo": bool(l.group(3)), "text": l.group(4).strip(),
-                                   "line": cur["line"], "no_cue": not l.group(2)})
+                                   "line": cur["line"], "no_cue": not l.group(2), "raw": s})
                 continue
         if not s or TITLE_RE.match(s) or EP_LABEL_RE.match(s) or \
                 s.startswith(("【", "(", "（", "本集", "━", "┈", "=", "—")):
@@ -324,10 +337,27 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
                     f"「{t[:34]}」与 {seen[t]} 说的完全一样")
             seen.setdefault(t, d["sp"])
 
-    # M15 台词量
+    # M15 篇幅：按声明的成片规格反推正文目标区间（见 references/timing-model.md）
+    chars = sum(len(re.sub(r"\s", "", l)) for sc in scenes for l in sc["body"]) + \
+            sum(len(re.sub(r"\s", "", d["raw"])) for sc in scenes for d in sc["dlg"])
     total = sum(len(sc["dlg"]) for sc in scenes)
-    if total < MIN_DIALOGUE:
-        add("WARN", "-", "台词量不足", f"本集 {total} 句（口径 ≥{MIN_DIALOGUE}）")
+    spec = (flags or {}).get("spec_seconds")
+    if spec:
+        lo_c = int((spec * 0.95 - FIT_A) / FIT_B)
+        hi_c = int((spec * 1.05 - FIT_A) / FIT_B)
+        est = FIT_A + FIT_B * chars
+        if chars < lo_c:
+            add("WARN", "-", "篇幅偏短",
+                f"正文 {chars} 字 → 预计约 {est:.0f} 秒；声明规格单集 {spec} 秒（目标正文 "
+                f"{lo_c}–{hi_c} 字）。补 2–4 个 ▲ 可演动作，别加台词（台词只按半价计入）")
+        elif chars > hi_c:
+            add("WARN", "-", "篇幅偏长",
+                f"正文 {chars} 字 → 预计约 {est:.0f} 秒；声明规格单集 {spec} 秒（目标正文 "
+                f"{lo_c}–{hi_c} 字）。先砍动作，再砍台词")
+    else:
+        # 没声明规格时不在逐集里报，攒到项目层出一条汇总（避免 13 集刷 13 条提示）
+        if flags is not None:
+            flags.setdefault("ep_chars", []).append((ep_no, chars, total))
     return scenes
 
 
@@ -403,7 +433,7 @@ def project_check(project: Path, eps, has_assets: bool, sheet_rows, out, labels=
 
     peer = Path(__file__).resolve().parents[1].parent / "short-drama-script" / "references"
     if peer.is_dir():
-        for f in ("format-spec.md", "project-layout.md"):
+        for f in ("format-spec.md", "project-layout.md", "timing-model.md"):
             a = Path(__file__).resolve().parents[1] / "references" / f
             b = peer / f
             if a.exists() and b.exists() and hashlib.sha256(a.read_bytes()).hexdigest() != \
@@ -451,10 +481,11 @@ def main() -> int:
         return 1
 
     wl, people, props, has_assets, labels = parse_settings(project)
+    spec_seconds = read_spec_seconds(project)
     out = []
     script_lines = []
     sheet_rows = []
-    flags = {}
+    flags = {"spec_seconds": spec_seconds}
     total_scenes = 0
     for ep_no, path in eps:
         scs = check_episode(ep_no, path, wl, people, props, has_assets, out, flags, labels)
@@ -469,14 +500,27 @@ def main() -> int:
                     "msg": f"{len(fs)} 集仍把集号写在第一行（{fs[0]} 等）；现行标准："
                            f"第一行只留「<剧名> · <英文名>」，概要块提到集头块上面，"
                            f"集头块单独写「第 N 集：<集名>」＋语言声明"})
+    if not spec_seconds and flags.get("ep_chars"):
+        rows = flags["ep_chars"]
+        lo = min(c for _, c, _ in rows)
+        hi = max(c for _, c, _ in rows)
+        lo_d, hi_d = min(t for _, _, t in rows), max(t for _, _, t in rows)
+        out.append({"level": "INFO", "file": "-", "scene": "-",
+                    "kind": "未声明成片规格",
+                    "msg": f"{len(rows)} 集，每集正文 {lo}–{hi} 字（约 "
+                           f"{FIT_A + FIT_B * lo:.0f}–{FIT_A + FIT_B * hi:.0f} 秒），"
+                           f"台词 {lo_d}–{hi_d} 句。在《全局设定》里加一行"
+                           f"「成片规格：单集 N 秒」，脚本就会逐集校验篇幅"
+                           f"（口径见 references/timing-model.md）"})
     rebuild_check(project, script_lines, out)
     project_check(project, eps, has_assets, sheet_rows, out, labels, people)
 
     fails = [f for f in out if f["level"] == "FAIL"]
     warns = [f for f in out if f["level"] == "WARN"]
+    infos = [f for f in out if f["level"] == "INFO"]
     print(f"正本 {len(eps)} 集 ｜ 场 {total_scenes} ｜ 台词 {len(script_lines)} 句")
-    print(f"FAIL {len(fails)} ｜ WARN {len(warns)}")
-    for f in fails + warns:
+    print(f"FAIL {len(fails)} ｜ WARN {len(warns)} ｜ INFO {len(infos)}")
+    for f in fails + warns + infos:
         print(f"  [{f['level']}] {f['file']} {f['scene']} · {f['kind']}：{f['msg']}")
     if args.json:
         args.json.write_text(json.dumps(

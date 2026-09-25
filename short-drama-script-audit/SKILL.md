@@ -14,7 +14,7 @@ metadata:
 
 审查与修改是两个工作单元：**审查轮只出结论，用户明确要求时才进编辑轮。**
 
-本 skill 的 `references/format-spec.md`、`references/project-layout.md` 与写作 skill
+本 skill 的 `references/format-spec.md`、`references/project-layout.md`、`references/timing-model.md` 与写作 skill
 `$short-drama-script` 里的同名文件**逐字节同源**；改一处必须同步另一处（脚本会做 hash 比对）。
 
 ## 用法
@@ -106,5 +106,6 @@ metadata:
 ./sync.sh --check      # 只比对差异，不动文件
 ```
 
-两份与写作 skill 同源的 `references/format-spec.md`、`references/project-layout.md` 必须一起改；
+三份与写作 skill 同源的 `references/format-spec.md`、`references/project-layout.md`、
+`references/timing-model.md` 必须一起改；
 脚本会做 hash 比对，漂移会在 P 类检查里报出来。
