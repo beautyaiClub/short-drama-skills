@@ -21,7 +21,8 @@ license: MIT
 | 开发点子、系列承诺、改编和分集地图 | `$short-drama-develop`，仅在用户需要时 |
 | 已有多集完整剧本/散稿识别分集 | `$short-drama-develop` 按实际边界建立临时索引 |
 | 分析长篇原著 | `$short-drama-novel-analyze`，仅在用户需要时 |
-| 写或改单集剧本 | `$short-drama-write` → `剧本.md` |
+| 写或改单集剧本 | `$short-drama-script` → `第N集.txt`（**本仓库采用的场次本格式**，配套门禁 `$short-drama-script-audit`） |
+| 写或改单集剧本（Markdown 方言线，可选） | `$short-drama-write` → `剧集/<EP>/剧本.md`。**这条线没有随本仓库分发**，且与场次本格式互不通用——同一部剧只能用一种 |
 | 拆人物、造型、地点、道具 | `$short-drama-assets` → `视觉设定.md` |
 | 写资产图片提示词 | `$short-drama-image-prompts` → `图片提示词.md` |
 | 做镜头和冻结关键帧 | `$short-drama-storyboard` → `分镜.md` |

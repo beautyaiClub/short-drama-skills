@@ -31,7 +31,7 @@ python3 {技能目录}/scripts/episode_intake.py index <多集整稿> --out <epi
    来源片段与待确认项。长材料先做语义分段、功能账本和候选分集，不用正则人名/名词命中
    直接发布剧集或资产；不要偷换原意。
 3. **方向已定，只需规划分集**：读取既有简报与引擎，直接制作或修订分集地图。
-4. **已有单集剧本**：不要为了流程完整而虚构开发材料。写/改剧本交给 `$short-drama-write`；拆资产或后续制作可从相应技能直接进入。
+4. **已有单集剧本**：不要为了流程完整而虚构开发材料。写/改剧本交给 `$short-drama-script`（场次本 `第N集.txt`；若项目走 Markdown 方言线才用 `$short-drama-write`，那条线未随本仓库分发）；拆资产或后续制作可从相应技能直接进入。
 5. **已有多集整稿，要生成或补分集地图**：保留原文件，只加载
    [多集整稿接入与断点续跑](references/multi-episode-intake.md)。让 Agent 按文件实际结构决定
    边界与本轮批次；工具只做精确索引、单集切片、校验和续跑，不代写创作判断。
@@ -128,7 +128,7 @@ python3 {技能目录}/scripts/episode_intake.py index <多集整稿> --out <epi
 - `项目开发/episode-intake-index.json`（多集整稿接入时；可重建的机械索引，不是创作事实）
 - `项目开发/episode-map.jsonl`
 
-它不写场景动作与台词，不拆资产，不写图片/视频提示词，不生成媒体，也不签发终审结论。剧本语义由 `$short-drama-write` 接管。
+它不写场景动作与台词，不拆资产，不写图片/视频提示词，不生成媒体，也不签发终审结论。剧本语义由 `$short-drama-script` 接管（场次本 `第N集.txt`；Markdown 方言线 `$short-drama-write` 未随本仓库分发）。
 
 ## 按需加载
 
