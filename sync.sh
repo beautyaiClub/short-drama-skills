@@ -8,7 +8,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 DEST="${CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
-SKILLS=(short-drama-script short-drama-script-audit)
+SKILLS=(short-drama short-drama-develop short-drama-script short-drama-script-audit short-drama-review)
 MODE="${1:-push}"
 
 for s in "${SKILLS[@]}"; do

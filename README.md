@@ -1,11 +1,17 @@
 # short-drama-skills
 
-两个 Codex skill，构成短剧剧本「写 → 审 → 交」的标准闭环：
+五个 Codex skill，构成短剧从「立项 → 开发 → 写 → 审 → 交」的标准闭环：
 
-| skill | 职责 | 入口 |
-|---|---|---|
-| `short-drama-script` | 写纯剧本格式（场次本）剧本；维护项目骨架（全局设定／整体大纲／台词对照本／分集场次表）；生成派生件；打包交付 | `SKILL.md` |
-| `short-drama-script-audit` | 审查同一格式的剧本：机械校验、连续性、接缝、台词、项目与交付层；出审查记录与结论 | `SKILL.md` |
+| skill | 职责 | 什么时候用 | 入口 |
+|---|---|---|---|
+| `short-drama` | **创建台**：初始化项目目录、项目配置、本地 Dashboard；做**制作形态与 Look Development 决策**（实拍／二维动态漫／风格化三维…、画幅、参考片角色） | 开一部新剧的第一件事 | `SKILL.md` |
+| `short-drama-develop` | **开发层**：把小说／梗概／点子落成创作简报、故事引擎、人物行动模型、分集地图；按题材卡（复仇打脸／仙侠修真／悬疑规则…）选写法 | 定方向、改骨架、扩集数 | `SKILL.md` |
+| `short-drama-script` | **写**：纯剧本格式（场次本）正本；维护全局设定／整体大纲／人物总表／台词对照本／分集场次表；生成派生件；打包交付 | 写或改任何一集 | `SKILL.md` |
+| `short-drama-script-audit` | **审**：机械校验（格式／说话人／篇幅／台词账）、连续性、接缝、台词、项目与交付层；出审查记录与结论 | 每写完两集、每次交付前 | `SKILL.md` |
+| `short-drama-review` | **内容层复核**：按故事剧本 rubric 审剧情承诺、集形、进场、场测、动作、台词；写证据化 finding 与结论（APPROVE／REVISE） | 阶段性通读、终审 | `SKILL.md` |
+
+> 只写某一集、不要流程：装 `short-drama-script` ＋ `short-drama-script-audit` 就够（这是最低配置）。
+> 完整跑一部剧：上面五个。安装步骤见 **[INSTALL.md](INSTALL.md)**。
 
 两边的 `references/format-spec.md`、`references/project-layout.md` 是**逐字节同源副本**，
 改一处必须改两处；审查脚本会做 hash 比对，漂移会在检查里报出来。
@@ -313,6 +319,21 @@ Lena（朝沙脊上喊，短）：Now.
 
 ## 安装 / 同步
 
+**给别人用的安装方法**（完整步骤见 [INSTALL.md](INSTALL.md)）：
+
+```bash
+git clone https://github.com/beautyaiClub/short-drama-skills.git
+cd short-drama-skills
+./sync.sh                 # 把仓库里的 5 个 skill 装到 ~/.codex/skills
+./sync.sh --check         # 只比对，不动文件
+```
+
+不想用脚本，手动拷也行：
+
+```bash
+cp -R short-drama short-drama-develop short-drama-script short-drama-script-audit short-drama-review ~/.codex/skills/
+```
+
 仓库是**源**，`~/.codex/skills/` 是安装副本。改完用仓库根目录的脚本对齐：
 
 ```bash
@@ -320,10 +341,10 @@ Lena（朝沙脊上喊，短）：Now.
 ./sync.sh --check      # 只比对差异，不动文件
 ```
 
-手动安装也可以（把两个目录拷进 skills 目录）：
+手动安装也可以（把目录拷进 skills 目录）：
 
 ```bash
-cp -R short-drama-script short-drama-script-audit ~/.codex/skills/
+cp -R short-drama short-drama-develop short-drama-script short-drama-script-audit short-drama-review ~/.codex/skills/
 ```
 
 ## 标准流程
@@ -372,7 +393,18 @@ python3 short-drama-script/scripts/pack_delivery.py <项目目录> --label r1
 ```text
 short-drama-skills/
 |-- README.md
+|-- INSTALL.md                            安装、上手指南、给别人用的最小包
 |-- sync.sh
+|-- short-drama/                          创建台：项目骨架／制作形态／Look Development／Dashboard
+|   |-- SKILL.md
+|   |-- references/（creator-documents、look-development、production-form-profiles、form-cards/*…）
+|   |-- scripts/{project_tool,dashboard_server,creator_markdown_check,selftest}.py
+|   `-- assets/{project-template,dashboard/*,…}
+|-- short-drama-develop/                 开发层：创作简报／故事引擎／分集地图／题材卡
+|   |-- SKILL.md
+|   |-- references/（story-craft、episode-design、genre-cards/*、multi-episode-intake…）
+|   |-- scripts/{episode_intake,selftest}.py
+|   `-- assets/story-engine.md
 |-- short-drama-script/
 |   |-- SKILL.md
 |   |-- agents/openai.yaml
@@ -381,13 +413,18 @@ short-drama-skills/
 |   |-- references/write-checklist.md    写作自检清单
 |   |-- references/derived-docs.md       派生件结构与对账纪律
 |   `-- scripts/{init_project,build_derived_docs,pack_delivery,migrate_header}.py
-`-- short-drama-script-audit/
+|-- short-drama-script-audit/
     |-- SKILL.md
     |-- references/format-spec.md        同源副本
     |-- references/project-layout.md     同源副本
     |-- references/audit-checklist.md    A 格式／B 连续性／C 接缝／D 台词／E 审查口径／F 项目与交付
     |-- references/review-ledger.md      审查记录规范与状态机
     `-- scripts/audit_plain_script.py    机械校验 ＋ 项目与交付检查
+`-- short-drama-review/                  内容层复核：故事剧本 rubric／finding 模板／结论
+    |-- SKILL.md
+    |-- references/（review-method、rubric-story-script、rubric-visual-motion…）
+    |-- scripts/{review_check,selftest}.py
+    `-- assets/{finding-template.jsonl,verdict-template.json,…}
 ```
 
 ## 维护规则
