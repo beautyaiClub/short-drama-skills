@@ -59,6 +59,15 @@ VO_NEG = ("没有回", "没回", "不回", "没有回答")   # "Lena（没有回
 SPEC_RE = re.compile(r"成片规格[：:]\s*[^\n]*?(\d+)\s*秒")
 FIT_A, FIT_B = 15.0, 0.077        # 秒 ≈ A + B×正文字数（实测拟合）
 DUP_MIN_CHARS = 12
+# 疑问句（用于 M16）。只认高置信度的收尾，避免误报：
+#   ① 以"吗"收尾；② 以"哪儿呢／什么呀／谁呀"这类疑问词组收尾。
+# 其余情况要靠人读——"什么／呢／哪儿"既能收疑问句，也能收陈述句
+# （"知道我在等什么。"／"录着呢！"），机器判不了，写进审查清单的 `[读]` 项。
+Q_TAIL = ("吗", "哪儿呢", "什么呀", "谁呀", "怎么样呢")
+# 两界时间换算（用于项目级 P 项）：外面／这里 与 里面 的对举必须只有一个比值
+RATIO_RE = re.compile(r"(外面|里面)([一二三四五六七八九十两\d]+)\s*(个时辰|时辰|小时|夜|天|日|个月|月|年)")
+UNIT_HOURS = {"时辰": 2.0, "小时": 1.0, "夜": 8.0, "天": 24.0, "日": 24.0,
+              "月": 720.0, "年": 8760.0}
 
 SCENE_RE = re.compile(r"^【(\d+)-(\d+)\s+(\S+)\s+(\S+)\s+(.+)】$")
 DLG_RE = re.compile(r"^(.+?)（(.+?)）(\[VO\])?：(.+)$")
@@ -325,17 +334,33 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
             add("WARN", b["id"], "接缝缺时间承载",
                 f"{a['id']}({a['time']})→{b['id']}({b['time']})：开场没交代过了多久")
 
-    # M14 同集重复台词（含近似）
+    # M14 同集重复台词：不同人说同一句 = 复用；同一人说两遍 = 自己重复（改稿只改一半的典型症状）
     seen = {}
     for sc in scenes:
         for d in sc["dlg"]:
             t = d["text"]
             if len(t) < DUP_MIN_CHARS:
                 continue
-            if t in seen and seen[t] != d["sp"]:
-                add("WARN", sc["id"], "同集台词复用",
-                    f"「{t[:34]}」与 {seen[t]} 说的完全一样")
+            if t in seen:
+                if seen[t] != d["sp"]:
+                    add("WARN", sc["id"], "同集台词复用",
+                        f"「{t[:34]}」与 {seen[t]} 说的完全一样")
+                else:
+                    add("WARN", sc["id"], "同集台词重复（同一人）",
+                        f"{d['sp']} 在同一集里把「{t[:34]}」说了两遍；"
+                        f"刻意当回声的在审查记录里注明，其余删掉或换成新信息")
             seen.setdefault(t, d["sp"])
+
+    # M16 疑问句用句号／叹号收尾：配音会把尾音读平（format-spec §6.5.2）
+    for sc in scenes:
+        for d in sc["dlg"]:
+            t = d["text"].rstrip()
+            if not t or t[-1] not in "。！":
+                continue
+            if any(t[:-1].endswith(q) for q in Q_TAIL):
+                add("WARN", sc["id"], "疑问句未用问号",
+                    f"「{t[:34]}」是疑问句却用「{t[-1]}」收尾；改成 ？"
+                    f"（反问但语义是陈述的，在审查记录里注明保留）")
 
     # M15 篇幅：按声明的成片规格反推正文目标区间（见 references/timing-model.md）
     chars = sum(len(re.sub(r"\s", "", l)) for sc in scenes for l in sc["body"]) + \
@@ -394,6 +419,37 @@ def project_check(project: Path, eps, has_assets: bool, sheet_rows, out, labels=
             "没有《*全局设定*.txt》：场景／人物／道具校验已降级，结论最高只能写 PROVISIONAL")
 
     sheets = docs["分集场次表"]
+
+    # 两界时间换算：同一句里同时出现"外面／里面"的对举，比值必须全剧一致
+    def _num(s: str) -> int:
+        if s.isdigit():
+            return int(s)
+        if s.startswith("十"):
+            return 10 + CN_NUM.get(s[1:], 0)
+        if "十" in s:
+            a, _, b = s.partition("十")
+            return CN_NUM.get(a, 0) * 10 + (CN_NUM.get(b, 0) if b else 0)
+        return CN_NUM.get(s, 0)
+
+    ratios = []
+    for ep_no, split_path in eps:
+        for seg in re.split(r"[。！？；\n]", read(split_path)):
+            hits = {m.group(1): m for m in RATIO_RE.finditer(seg)}
+            if "外面" not in hits or "里面" not in hits:
+                continue
+            outter, inner = hits["外面"], hits["里面"]
+            oh = _num(outter.group(2)) * UNIT_HOURS.get(outter.group(3).replace("个", ""), 0)
+            ih = _num(inner.group(2)) * UNIT_HOURS.get(inner.group(3).replace("个", ""), 0)
+            if oh and ih:
+                ratios.append((ep_no, oh / ih, seg.strip()[:38]))
+    if len(ratios) > 1:
+        base = ratios[0][1]
+        off = next((r for r in ratios[1:] if abs(r[1] - base) / base > 0.2), None)
+        if off:
+            add("WARN", "换算口径不一致",
+                f"EP{ratios[0][0]:02d}「{ratios[0][2]}」与 EP{off[0]:02d}「{off[2]}」"
+                f"给出的两界时间比不一样；定一个口径写进《全局设定》，全剧统一")
+
     if sheets:
         rows = []
         for line in read(sheets[0]).split("\n"):
