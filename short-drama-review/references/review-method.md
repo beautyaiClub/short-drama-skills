@@ -63,6 +63,10 @@ the write owner what outcome must be restored.
 The review Markdown cites the current file name, heading ID, line number or a necessary short quotation directly.
 It does not copy upstream snapshots, invent record IDs or create another version of the source material.
 
+场次本项目（`第N集.txt`）没有 record ID 体系：findings 里用 `field`
+（文件名／场号／行号／短引文）引用即可通过 `scripts/review_check.py` 的 `evidence_declaration` 检查，
+不必为引用硬造 record ID。
+
 ## Cross-layer synthesis
 
 Trace important moves end to end: story fact, asset decision, shot boundary, keyframe, motion and next-shot state.

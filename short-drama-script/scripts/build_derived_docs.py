@@ -25,10 +25,22 @@ from pathlib import Path
 
 CN_NUM = {"零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6,
           "七": 7, "八": 8, "九": 9, "十": 10}
-DEFAULT_PROPS = ["弓", "箭", "刀", "斧", "撬棍", "工具袋", "水囊", "水桶", "碗", "望远镜",
-                 "哨子", "短刃", "钢索", "钢缆", "铁爪", "钢板", "账板", "鞋", "话筒",
-                 "电台", "步枪", "子弹", "燃料", "布条", "铁牌", "护齿", "折叠椅",
-                 "绞盘", "水泵", "吊闸", "闸门", "水塔"]
+# 道具名的第一来源是**项目自己的资产命名表**（《全局设定》里的 `PR-xx 名称（注释）`）。
+# 下面这组只是没有《全局设定》时的通用兜底词，v1 时代这里写死过一部前作的道具
+# （弓／箭／绞盘／水塔…），结果是别的题材的道具一个都认不出来。
+GENERIC_PROPS = ["碗", "刀", "钥匙", "账本", "册子", "信封", "灯", "弓", "箭", "药", "钱袋"]
+PROP_LINE_RE = re.compile(r"^PR-\d+\s+([^｜（(\n]+)")
+
+
+def project_props(project: Path) -> list:
+    """道具名：优先从《全局设定》的 PR 表读，读不到才用通用兜底词。"""
+    for p in project.glob("*全局设定*.txt"):
+        names = [m.group(1).strip() for m in
+                 (PROP_LINE_RE.match(l.strip()) for l in p.read_text(encoding="utf-8").split("\n"))
+                 if m]
+        if names:
+            return names
+    return list(GENERIC_PROPS)
 
 SCENE_RE = re.compile(r"^【(\d+)-(\d+)\s+(\S+)\s+(\S+)\s+(.+)】$")
 DLG_RE = re.compile(r"^(.+?)（(.+?)）(\[VO\])?：(.+)$")
@@ -131,8 +143,18 @@ def parse_episode(path: Path):
 
 
 def scene_props(sc: dict, props: list):
+    """本场涉及的物件：按 PR 名匹配，也认「的」后面的那个词。
+
+    资产名常写成描述式（`后补的碗`），剧本里却只写「碗」；只比全名会漏道具，
+    所以每个 PR 名额外贡献一个"尾词"（`碗`／`旧物`）一起匹配。
+    """
     text = " ".join(sc["body"])
-    return [p for p in props if p in text]
+    hits = []
+    for p in props:
+        tail = re.sub(r"[（(].*?[）)]", "", p.split("的")[-1]).strip()
+        if (p in text or (tail and tail in text)) and p not in hits:
+            hits.append(p)
+    return hits
 
 
 def build_sheet(title: str, english: str, eps, props: list) -> str:
@@ -283,7 +305,7 @@ def main() -> int:
         print("没有找到 第N集.txt 正本", file=sys.stderr)
         return 1
     title, english = detect_names(project, eps)
-    props = DEFAULT_PROPS + [x.strip() for x in args.props.split(",") if x.strip()]
+    props = project_props(project) + [x.strip() for x in args.props.split(",") if x.strip()]
 
     sheet_text = build_sheet(title, english, eps, props)
     sheet_path = project / f"{title}-分集场次表.txt"

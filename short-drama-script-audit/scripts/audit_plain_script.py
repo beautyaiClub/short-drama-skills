@@ -30,14 +30,17 @@ TIMES = ("日", "昏", "夜", "晨")
 IOS = ("内", "外")
 # 发声标签（开口的无名角色）由**项目**声明，不写死在脚本里——
 # 放在 `<剧名>-发声标签.txt`（一行一个），或《全局设定》里的「发声标签：甲、乙、丙」一行。
-# 下面这组只是老项目的兜底默认值（v1 时代硬编码在这里），项目声明会与之取并集。
+# **标签表默认是空的**：v1 时代这里硬编码了一部前作的角色名（掠夺者甲／营地女战士…），
+# 结果是任何项目写"守卫乙"都会被当成合法标签、机检失效。现在只认项目声明；
+# 没有声明时脚本会给一条 INFO 提醒，而不会再替项目"兜底"。
 GROUP_SUFFIX = "群像"
-BUILTIN_LABELS = {
-    "掠夺者", "掠夺者甲", "掠夺者乙", "掠夺者丙", "掠夺者守卫", "掠夺者随从",
-    "掠夺者杀手", "掠夺者搜索队", "护卫", "杀手", "守卫", "女战士", "营地女战士",
-    "那个女战士", "首领", "军官", "领头的", "军官甲", "人群", "孩子", "孩子们",
-    "获救的人", "被掳的人", "未知",
-}
+BUILTIN_LABELS: set[str] = set()
+
+# 语言口径（用于项目级 P 项）：`short-drama.json` 的 prompt_language、集头语言声明、
+# 《全局设定》里的「提示词语言：中文」三处必须说同一件事。
+PROMPT_LANG_FIELD_RE = re.compile(r"提示词语言[：:]\s*([^\n]+)")
+LANG_ZH_KEYS = ("中文", "汉语", "漢語", "zh", "cmn", "chinese")
+LANG_EN_KEYS = ("英文", "英语", "英語", "en", "english")
 LABEL_FIELD_RE = re.compile(r"^\s*发声标签\s*[：:]\s*(.+)$", re.M)
 VEHICLE_SUFFIX = ("车", "之王", "闸门", "吊闸", "水塔", "装置", "电台")
 OLD_FIELDS = ("镜号", "景别：", "景别:", "机位", "焦段", "时长：", "时长:",
@@ -75,6 +78,8 @@ DLG_RE = re.compile(r"^(.+?)（(.+?)）(\[VO\])?：(.+)$")
 TITLE_RE = re.compile(r"^.+ · .+ · 第 ?[0-9一二三四五六七八九十]+ ?集")
 # 集头块行（现行标准：`第 N 集：<集名>`，单独一行）
 EP_LABEL_RE = re.compile(r"^第\s*[0-9一二三四五六七八九十]+\s*集\s*[：:]\s*.+")
+# 对外版里的拷贝件小节标题（例：`第一集（138 秒 · 现代 · 拍卖行·大拍厅）`）
+EP_COPY_HEAD_RE = re.compile(r"^第\s*[0-9一二三四五六七八九十]+\s*集\s*[（(].*[）)]\s*$")
 # 集号写在第一行里的老排法（不锚定，用于识别 `剧名 · 英文名 · 第 N 集：<集名>`）
 EP_INLINE_RE = re.compile(r"第\s*[0-9一二三四五六七八九十]+\s*集\s*[：:]\s*.+")
 LOOSE_DLG_RE = re.compile(r"^(.+?)(?:（(.*?)）)?(\[VO\])?：(.+)$")
@@ -408,7 +413,8 @@ def project_check(project: Path, eps, has_assets: bool, sheet_rows, out, labels=
         if not has_field and not (labels - BUILTIN_LABELS):
             add("INFO", "发声标签表",
                 "项目没有声明发声标签（`<剧名>-发声标签.txt` 或《全局设定》的「发声标签：…」行）；"
-                "开口的无名角色沿用内置兜底表，跨题材项目建议显式声明")
+                "脚本不再有内置兜底表，未声明的无名开口角色会被判成「说话人不在人物行」——"
+                "请把标签显式声明出来")
     overlap = sorted(set(labels) & set(people) - set(BUILTIN_LABELS))
     if overlap:
         add("WARN", "标签与资产重名",
@@ -417,6 +423,40 @@ def project_check(project: Path, eps, has_assets: bool, sheet_rows, out, labels=
     if not has_assets:
         add("WARN", "缺资产命名表",
             "没有《*全局设定*.txt》：场景／人物／道具校验已降级，结论最高只能写 PROVISIONAL")
+
+    # 语言口径：三处必须说同一件事——short-drama.json 的 prompt_language、
+    # 集头的语言声明行、《全局设定》里的「提示词语言：…」（没有声明的那两处跳过）。
+    def _lang_kind(text_: str) -> str:
+        t = text_.lower()
+        if any(k in t for k in LANG_EN_KEYS):
+            return "英文"
+        if any(k in t for k in LANG_ZH_KEYS):
+            return "中文"
+        return ""
+
+    lang_seen = {}
+    jf = project / "short-drama.json"
+    if jf.exists():
+        try:
+            fmt = json.loads(read(jf)).get("format") or {}
+        except json.JSONDecodeError:
+            fmt = {}
+        got = _lang_kind(str(fmt.get("prompt_language") or ""))
+        if got:
+            lang_seen[f"short-drama.json 的 prompt_language({fmt.get('prompt_language')})"] = got
+    for p in project.glob("*全局设定*.txt"):
+        m = PROMPT_LANG_FIELD_RE.search(read(p))
+        # 只取冒号后的头几个字判种别：声明行后面常跟一串解释（"…不做英文对照"），
+        # 整行扫会把中英文同时扫进来，反而把自己的说明判成矛盾。
+        head = m.group(1).strip()[:8] if m else ""
+        if head and _lang_kind(head):
+            lang_seen[f"《{p.name}》的「提示词语言」"] = _lang_kind(head)
+            break
+    if len(set(lang_seen.values())) > 1:
+        add("WARN", "语言口径不一致",
+            "；".join(f"{k}＝{v}" for k, v in lang_seen.items()) +
+            "。《全局设定》里的「提示词语言」与 short-drama.json 的 prompt_language 必须一致；"
+            "改一处就要两处一起改（图片／关键帧／视频提示词按哪一边写，全组只有一个答案）")
 
     sheets = docs["分集场次表"]
 
@@ -497,6 +537,66 @@ def project_check(project: Path, eps, has_assets: bool, sheet_rows, out, labels=
                 add("WARN", "标准副本漂移", f"{f} 与 $short-drama-script 的副本不一致，请同步两份")
 
 
+def delivery_copy_check(project: Path, eps, out: list):
+    """对外版一致性：*故事概要* 这类对外文档里内嵌的场次，必须与正本逐字一致。
+
+    正本改一句、对外版没回填，是最容易静默发生的脱钩。对外版里只要出现同名场标题，
+    就把「场标题 → 下一处场标题」之间的内容与正本比，第一行不同就报出来。
+    """
+    ep_names = {p.name for _, p in eps}
+    docs = [p for p in list(project.glob("*故事概要*.txt")) + list(project.glob("*对外*.txt"))
+            if p.name not in ep_names]
+    for doc in docs:
+        doc_lines = [l.rstrip() for l in read(doc).split("\n")]
+        doc_index: dict[str, int] = {}
+        for k, l in enumerate(doc_lines):
+            if SCENE_RE.match(l.strip()):
+                doc_index.setdefault(l.strip(), k)
+        if not doc_index:
+            continue
+        for ep_no, path in eps:
+            ep_lines = [l.rstrip() for l in read(path).split("\n")]
+            n = len(ep_lines)
+            i = 0
+            while i < n:
+                head = ep_lines[i].strip()
+                if not SCENE_RE.match(head):
+                    i += 1
+                    continue
+                j = i + 1
+                while j < n and not SCENE_RE.match(ep_lines[j].strip()):
+                    j += 1
+                k = doc_index.get(head)
+                if k is not None:
+                    # 拷贝件的终点＝对外版里下一处结构行（━━ 分隔线 / 【…】小节标题），
+                    # 末尾空行不算差异；只比"内容"部分，长度不足也算不一致。
+                    block = [l for l in ep_lines[i:j]]
+                    while block and not block[-1].strip():
+                        block.pop()
+                    end = len(doc_lines)
+                    for m in range(k + 1, len(doc_lines)):
+                        l = doc_lines[m].strip()
+                        if l.startswith(("━", "─")) or re.fullmatch(r"【.+?】", l) \
+                                or EP_LABEL_RE.match(l) or EP_COPY_HEAD_RE.match(l):
+                            end = m
+                            break
+                    got = doc_lines[k:end]
+                    while got and not got[-1].strip():
+                        got.pop()
+                    if got != block:
+                        first = next(
+                            (f"第 {m + 1} 行：正本「{block[m][:30]}」／对外版「{got[m][:30]}」"
+                             for m in range(min(len(block), len(got))) if block[m] != got[m]),
+                            f"段落长度不一致（正本 {len(block)} 行／对外版 {len(got)} 行）")
+                        out.append({"level": "WARN", "file": doc.name,
+                                    "scene": head[1:-1].split()[0],
+                                    "kind": "对外版与正本不一致",
+                                    "msg": f"{doc.name} 里内嵌的 {head[1:-1].split()[0]} 与正本 {path.name} "
+                                           f"对不上——{first}。对外版是拷贝件：改戏先改 `{path.name}`，"
+                                           f"再回填对外版"})
+                i = j
+
+
 def rebuild_check(project: Path, script_lines, out):
     """M16 台词对照本：与正本逐条对账（比正文）。"""
     cands = list(project.glob("*台词对照*.txt"))
@@ -569,6 +669,7 @@ def main() -> int:
                            f"「成片规格：单集 N 秒」，脚本就会逐集校验篇幅"
                            f"（口径见 references/timing-model.md）"})
     rebuild_check(project, script_lines, out)
+    delivery_copy_check(project, eps, out)
     project_check(project, eps, has_assets, sheet_rows, out, labels, people)
 
     fails = [f for f in out if f["level"] == "FAIL"]
