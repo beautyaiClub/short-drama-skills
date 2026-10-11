@@ -52,11 +52,10 @@ TIME_CARRIER = ("天刚亮", "天快亮", "天将亮", "天亮了", "天亮", "�
                 "早上", "早晨", "大清早", "白天", "斜光",
                 "月光", "后半夜", "整夜", "两天之后", "半天过去", "太阳", "次日",
                 "天刚黑", "黑透", "天黑之后")
-# 只认"声源不在画面里"的词：设备名（无线电／电台／电话）不算——
-# 角色当场对着无线电说话时人是看得见的，标了 [VO] 反而错。
-VO_HINT = ("喇叭", "画外", "传来", "传过来", "从谷外", "从远处", "从射程外",
-           "从车窗", "录音", "广播")
-VO_NEG = ("没有回", "没回", "不回", "没有回答")   # "Lena（没有回喇叭）" 这类是现场反应，不算场外声
+# Voice type follows explicit source/use, never a device name or generic “传来”.
+VO_PURPOSE = ("内心独白", "旁白", "解说", "跨时空声音")
+OS_PURPOSE = ("画外对白", "现场画外")
+
 # 篇幅校验：按项目在《全局设定》里声明的成片规格反推（见 references/timing-model.md）。
 # 不再用写死的"台词 ≥50 句"——那时长口径是 11 分钟一集的题材，对 90 秒一集是错的。
 SPEC_RE = re.compile(r"成片规格[：:]\s*[^\n]*?(\d+)\s*秒")
@@ -73,7 +72,7 @@ UNIT_HOURS = {"时辰": 2.0, "小时": 1.0, "夜": 8.0, "天": 24.0, "日": 24.0
               "月": 720.0, "年": 8760.0}
 
 SCENE_RE = re.compile(r"^【(\d+)-(\d+)\s+(\S+)\s+(\S+)\s+(.+)】$")
-DLG_RE = re.compile(r"^(.+?)（(.+?)）(\[VO\])?：(.+)$")
+DLG_RE = re.compile(r"^(.+?)（(.+?)）(\[(?:VO|OS)\])?：(.+)$")
 # 集标题行（`<剧名> · <英文名> · 第 N 集：<集名>`）；不同项目的剧名不同，按形状认，不写死剧名。
 TITLE_RE = re.compile(r"^.+ · .+ · 第 ?[0-9一二三四五六七八九十]+ ?集")
 # 集头块行（现行标准：`第 N 集：<集名>`，单独一行）
@@ -82,7 +81,7 @@ EP_LABEL_RE = re.compile(r"^第\s*[0-9一二三四五六七八九十]+\s*集\s*[
 EP_COPY_HEAD_RE = re.compile(r"^第\s*[0-9一二三四五六七八九十]+\s*集\s*[（(].*[）)]\s*$")
 # 集号写在第一行里的老排法（不锚定，用于识别 `剧名 · 英文名 · 第 N 集：<集名>`）
 EP_INLINE_RE = re.compile(r"第\s*[0-9一二三四五六七八九十]+\s*集\s*[：:]\s*.+")
-LOOSE_DLG_RE = re.compile(r"^(.+?)(?:（(.*?)）)?(\[VO\])?：(.+)$")
+LOOSE_DLG_RE = re.compile(r"^(.+?)(?:（(.*?)）)?(\[(?:VO|OS)\])?：(.+)$")
 CN_NUM = {"零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6,
           "七": 7, "八": 8, "九": 9, "十": 10}
 
@@ -186,14 +185,14 @@ def split_scenes(text: str, ep_no: int, known=frozenset()):
         d = DLG_RE.match(s)
         if d:
             cur["dlg"].append({"sp": d.group(1).strip(), "cue": d.group(2).strip(),
-                               "vo": bool(d.group(3)), "text": d.group(4).strip(),
+                               "voice": (d.group(3) or "").strip("[]"), "text": d.group(4).strip(),
                                "line": cur["line"], "no_cue": False, "raw": s})
             continue
         if s and not s.startswith(("【", "△", "▲")) and not s.startswith(HEADER_KEYS):
             l = LOOSE_DLG_RE.match(s)
             if l and l.group(1).strip() in (set(cur["people"]) | set(known)):
                 cur["dlg"].append({"sp": l.group(1).strip(), "cue": (l.group(2) or "").strip(),
-                                   "vo": bool(l.group(3)), "text": l.group(4).strip(),
+                                   "voice": (l.group(3) or "").strip("[]"), "text": l.group(4).strip(),
                                    "line": cur["line"], "no_cue": not l.group(2), "raw": s})
                 continue
         if not s or TITLE_RE.match(s) or EP_LABEL_RE.match(s) or \
@@ -201,6 +200,27 @@ def split_scenes(text: str, ep_no: int, known=frozenset()):
             continue
         cur["body"].append(s)
     return scenes
+
+
+def voice_findings(cue: str, voice: str):
+    """Report high-confidence contradictions without guessing shot framing."""
+    issues = []
+    vo_use = any(word in cue for word in VO_PURPOSE)
+    os_use = any(word in cue for word in OS_PURPOSE)
+    legacy_os = bool(re.search(r"(?:^|[，,\s])OS(?:$|[，,\s])", cue))
+    if vo_use and os_use:
+        issues.append(("FAIL", "声音用途冲突", "同时写了现场画外对白和非现场叙述用途，请明确声源"))
+    elif vo_use and voice != "VO":
+        issues.append(("FAIL", "非现场叙述标记错误", "内心独白／旁白应标 [VO]，不能标 OS 或省略标记"))
+    elif os_use and voice != "OS":
+        issues.append(("FAIL", "现场画外标记错误", "现场画外对白应标 [OS]，不能标 VO 或省略标记"))
+    if voice == "VO" and not vo_use:
+        issues.append(("FAIL", "VO 用途未说明", "请明确写内心独白、回忆旁白、解说等用途；普通对白不加 VO"))
+    if voice == "OS" and not os_use:
+        issues.append(("FAIL", "OS 用途未说明", "请明确写画外对白及声源位置；普通对白不加 OS"))
+    if legacy_os and voice != "OS":
+        issues.append(("FAIL", "旧 OS 写法需确认", "旧 OS 提示不能默认当内心独白；确认用途后显式写 [OS] 或 [VO]"))
+    return issues
 
 
 def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: list, flags=None,
@@ -283,9 +303,9 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
         if not sc["people"]:
             add("FAIL", sc["id"], "缺人物行", "场标题下没有「人物：」行")
             continue
-        base_names = [p.replace(" [VO]", "").strip() for p in sc["people"]]
+        base_names = [re.sub(r"\s*\[(?:VO|OS)\]", "", p).strip() for p in sc["people"]]
         for p in sc["people"]:
-            raw = p.replace(" [VO]", "").strip()
+            raw = re.sub(r"\s*\[(?:VO|OS)\]", "", p).strip()
             if any(c in p for c in "（）") or "；" in p:
                 add("FAIL", sc["id"], "人物行写法", f"「{p}」带中文注释或分号")
             if raw in labels:
@@ -311,16 +331,11 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
                     add("WARN", sc["id"], "正文有人未列（需人工确认）",
                         f"正文出现「{nm}」，本场人物行没有；若是物主（X 的车）或不在此处（某人不在这里）请忽略")
 
-    # M11 场外声缺 [VO]
+    # M11 Explicit voice semantics; ambiguous sound sources need human reading.
     for sc in scenes:
         for d in sc["dlg"]:
-            if d["vo"]:
-                continue
-            if any(n in d["cue"] for n in VO_NEG):
-                continue
-            if any(h in d["cue"] for h in VO_HINT):
-                add("WARN", sc["id"], "疑似缺 [VO]",
-                    f"「{d['sp']}（{d['cue']}）」像场外声，配音需要 [VO] 区分")
+            for level, kind, msg in voice_findings(d["cue"], d["voice"]):
+                add(level, sc["id"], kind, f"「{d['sp']}（{d['cue']}）」{msg}")
 
     # M12 夜戏光源
     for sc in scenes:

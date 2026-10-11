@@ -26,7 +26,7 @@ from pathlib import Path
 CN_NUM = {"零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6,
           "七": 7, "八": 8, "九": 9, "十": 10}
 SCENE_RE = re.compile(r"^【(\d+)-(\d+)\s+(\S+)\s+(\S+)\s+(.+)】$")
-DLG_RE = re.compile(r"^(.+?)（(.+?)）(\[VO\])?：(.+)$")
+DLG_RE = re.compile(r"^(.+?)（(.+?)）(\[(?:VO|OS)\])?：(.+)$")
 EP_LABEL_RE = re.compile(r"第\s*([0-9一二三四五六七八九十]+)\s*集\s*[：:]\s*(.+)")
 
 

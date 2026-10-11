@@ -43,7 +43,7 @@ def project_props(project: Path) -> list:
     return list(GENERIC_PROPS)
 
 SCENE_RE = re.compile(r"^【(\d+)-(\d+)\s+(\S+)\s+(\S+)\s+(.+)】$")
-DLG_RE = re.compile(r"^(.+?)（(.+?)）(\[VO\])?：(.+)$")
+DLG_RE = re.compile(r"^(.+?)（(.+?)）(\[(?:VO|OS)\])?：(.+)$")
 EP_LABEL_RE = re.compile(r"第\s*([0-9一二三四五六七八九十]+)\s*集\s*[：:]\s*(.+)")
 
 
@@ -252,7 +252,7 @@ def rebuild_reference(title: str, english: str, eps, project: Path, cn_map: dict
                 continue
             d = DLG_RE.match(s)
             if d:
-                sp = f"{d.group(1)}（{d.group(2)}）" + ("[VO]" if d.group(3) else "")
+                sp = f"{d.group(1)}（{d.group(2)}）" + (d.group(3) or "")
                 items.append(("D", n, sp.strip(), d.group(4).strip()))
 
     cands = list(project.glob("*台词对照*.txt"))
