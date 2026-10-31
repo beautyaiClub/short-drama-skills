@@ -62,6 +62,8 @@
 1. 生成派生件：`python3 scripts/build_derived_docs.py <项目目录>`（不许手写派生件）。
 2. 跑门禁：`$short-drama-script-audit` 的 `scripts/audit_plain_script.py <项目目录>`，FAIL 必须为 0。
 3. 交审查：记录落 `审查/`，**每次审查一个新文件**，不覆盖旧记录。
+   完成连续三集时，按 [three-episode-review.md](three-episode-review.md) 连读本批正本及相邻入口；
+   用目标、选择、回报、代价和尾钩矩阵找跨集重复，修后回看波及处并重建派生件。
 4. 交付：`python3 scripts/pack_delivery.py <项目目录> --label rN`；确认包内文件与项目当前文件逐字节一致。
 
 ## 五、几条最容易忘的硬规则

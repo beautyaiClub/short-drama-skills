@@ -50,6 +50,7 @@ license: MIT
 
 - 原著分析：[原著分析审查表](references/rubric-source-analysis.md)
 - 故事、场景、行动与对白：[故事剧本审查表](references/rubric-story-script.md)
+- 连续三集或多集联合回归：另读 [批次回归](references/batch-regression.md)，检查跨集累积与边界。
 - 身份、变体、连续性与图片提示词：[资产提示词审查表](references/rubric-assets-prompts.md)
 - 原文落实、镜头、关键帧与视频运动：[视觉运动审查表](references/rubric-visual-motion.md)
 - 完整审查方法：[审查方法](references/review-method.md)

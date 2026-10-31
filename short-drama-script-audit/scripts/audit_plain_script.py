@@ -335,6 +335,15 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
                     f"解析器已按对白处理，但配音拿不到表演依据")
             if d["sp"] in labels or GROUP_SUFFIX in d["sp"] or d["sp"] in base_names:
                 continue
+            # A registered character may speak from a separately established
+            # location over a device without becoming physically present here.
+            remote_device_os = (
+                d["sp"] in people and d.get("voice") == "OS"
+                and "画外对白" in d["cue"] and "远端" in d["cue"]
+                and re.search(r"对讲|无线电|通话|联络|电话", d["cue"])
+            )
+            if remote_device_os:
+                continue
             if has_assets and d["sp"] not in base_names:
                 add("FAIL", sc["id"], "说话人不在人物行", f"「{d['sp']}」未写进本场人物行")
         if has_assets:

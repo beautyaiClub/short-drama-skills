@@ -69,6 +69,9 @@ metadata:
 
 5. **交审查**：审查记录落 `审查/`，按 `$short-drama-script-audit` 的
    `references/review-ledger.md` 写。
+   默认每完成连续三集，再做一次 [三集联合回归](references/three-episode-review.md)：
+   连读台词、剧情走向、钩子兑现、回报与节奏、连续性及支持文档，并接住下一集入口。
+   创作者可调整频率；三集节点不替代单集自检，不强加每三集相同的剧情高潮。
 
 6. **交付**：`python3 scripts/pack_delivery.py <项目目录> --label r1`
 

@@ -46,6 +46,9 @@ metadata:
    一行一条 finding，必须带原文证据与影响。
 5. **收口**：复审只审①上一轮 FAIL 的原位置、②改动波及范围、③已关闭项有没有回退。
 
+连续三集完成或创作者要求批次回归时，按 [three-episode-review.md](references/three-episode-review.md)
+检查三集全文及批次边界；不得用三次单集机械通过代替联合内容审查。无独立审稿时明确作者自检。
+
 ## 项目结构假设
 
 ```text

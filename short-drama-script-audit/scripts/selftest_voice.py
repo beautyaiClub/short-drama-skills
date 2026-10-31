@@ -19,6 +19,42 @@ audit = module('audit', ROOT / 'short-drama-script-audit/scripts/audit_plain_scr
 builder = module('builder', ROOT / 'short-drama-script/scripts/build_derived_docs.py')
 
 class VoiceTests(unittest.TestCase):
+    def speaker_findings(self, speaker='Ren', cue='画外对白，远端站台经对讲机传入，气息稳', tag='OS'):
+        text = f'''示例 · DEMO
+本集概要：Mio听见远端接应。
+【本集大场面】
+· 通话接应。
+本集人物：Mio、Ren
+本集场景：站台·外沿
+第 1 集：声音
+（人物标识英文 · 台词日语）
+【1-1 日 外 站台·外沿】
+人物：Mio
+△（近景）Mio握住连接锁。
+{speaker}（{cue}）[{tag}]：聞こえる？
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / '第一集.txt'
+            path.write_text(text, encoding='utf-8')
+            findings = []
+            audit.check_episode(1, path, {'站台': {'外沿'}}, {'Mio', 'Ren'}, set(), True,
+                                findings, {'script_format': 'director-integrated'})
+            return findings
+
+    def test_registered_remote_device_speaker_need_not_be_physically_present(self):
+        self.assertFalse(any(f['kind'] == '说话人不在人物行' for f in self.speaker_findings()))
+        self.assertTrue(any(f['kind'] == '说话人不在人物行'
+                            for f in self.speaker_findings(speaker='Unknown')))
+
+    def test_remote_exception_does_not_bypass_presence_or_voice_validation(self):
+        for cue, tag in [('画外对白，从站台门外传来，平', 'OS'),
+                         ('远端通过对讲机传入，平', 'OS'),
+                         ('画外对白，远端站台传来，平', 'OS'),
+                         ('画外对白，远端站台经对讲机传入，平', 'VO')]:
+            with self.subTest(cue=cue, tag=tag):
+                findings = self.speaker_findings(cue=cue, tag=tag)
+                self.assertTrue(any(f['kind'] == '说话人不在人物行' for f in findings))
+
     def test_ordinary_dialogue_and_device_names_do_not_require_voice_tags(self):
         for cue in ['挽着周砚舟，笑着抱怨', '无线电，平', '没有回答喇叭', '从门外传来，急促']:
             self.assertEqual(audit.voice_findings(cue, ''), [])
