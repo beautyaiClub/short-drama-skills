@@ -63,6 +63,15 @@ def read_spec(path: Path):
     return None
 
 
+def is_integrated(path: Path) -> bool:
+    for f in sorted(path.parent.glob("*全局设定*.txt")):
+        match = re.search(r"^剧本格式[：:]\s*(导演执行整合稿|纯场次本)\s*$",
+                          f.read_text(encoding="utf-8"), re.M)
+        if match:
+            return match.group(1) == "导演执行整合稿"
+    return False
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("script", type=Path)
@@ -75,6 +84,13 @@ def main() -> int:
     if not scenes:
         print("没解析到场标题【N-M 时间 内／外 场景】", file=sys.stderr)
         return 1
+
+    if is_integrated(args.script):
+        count = sum(len(sc["dlg"]) for sc in scenes)
+        print(f"{args.script.name}：导演执行整合稿，{len(scenes)} 场、{count} 句对白。")
+        print("摄影、微表情与声场说明不是额外对白；不适用纯场次本字数拟合。")
+        print("请用场次预算、目标语言试读和动作预演核对；当前不报告已测成片时长。")
+        return 0
 
     print(f"{args.script.name}　语速 {args.rate} 字/秒　语言系数 {args.lang}")
     print()

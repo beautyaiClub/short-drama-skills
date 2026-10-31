@@ -157,6 +157,16 @@ def read_spec_seconds(project: Path):
     return None
 
 
+def read_script_format(project: Path) -> str:
+    """Only an explicit project declaration selects the integrated format."""
+    pattern = re.compile(r"^剧本格式[：:]\s*(导演执行整合稿|纯场次本)\s*$", re.M)
+    for f in sorted(project.glob("*全局设定*.txt")):
+        match = pattern.search(read(f))
+        if match:
+            return "director-integrated" if match.group(1) == "导演执行整合稿" else "plain"
+    return "plain"
+
+
 HEADER_KEYS = ("本集概要", "本集大场面", "本集人物", "本集场景", "人物：")
 
 
@@ -228,6 +238,7 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
     text = read(path)
     lines = [l.strip() for l in text.split("\n")]
     name = path.name
+    integrated = (flags or {}).get("script_format", "plain") == "director-integrated"
 
     def add(level, scene, kind, msg):
         out.append({"level": level, "file": name, "scene": scene, "kind": kind, "msg": msg})
@@ -258,7 +269,9 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
     for i, s in enumerate(lines, 1):
         if s.startswith("人物：") or DLG_RE.match(s):
             continue
-        for w in OLD_FIELDS:
+        # The integrated mode explicitly embeds camera and sound direction, but
+        # does not silently convert the episode into a numbered shot list.
+        for w in (("镜号",) if integrated else OLD_FIELDS):
             if w in s:
                 add("FAIL", "-", "旧格式字段", f"L{i} 出现「{w}」：{s[:46]}")
                 break
@@ -387,7 +400,11 @@ def check_episode(ep_no: int, path: Path, wl, people, props, has_assets, out: li
             sum(len(re.sub(r"\s", "", d["raw"])) for sc in scenes for d in sc["dlg"])
     total = sum(len(sc["dlg"]) for sc in scenes)
     spec = (flags or {}).get("spec_seconds")
-    if spec:
+    if integrated:
+        add("INFO", "-", "整合稿时长需预演",
+            f"正本含摄影与表演说明，不用正文 {chars} 字拟合片长；"
+            "按项目目标、场次预算、目标语言试读和动作预演核对，预算不代表已测时长")
+    elif spec:
         lo_c = int((spec * 0.95 - FIT_A) / FIT_B)
         hi_c = int((spec * 1.05 - FIT_A) / FIT_B)
         est = FIT_A + FIT_B * chars
@@ -641,6 +658,8 @@ def main() -> int:
     ap.add_argument("project", type=Path)
     ap.add_argument("--json", type=Path)
     ap.add_argument("--strict", action="store_true")
+    ap.add_argument("--script-format", choices=("auto", "plain", "director-integrated"), default="auto",
+                    help="默认读取全局设定的剧本格式；显式指定可用于临时格式审查")
     args = ap.parse_args()
     project = args.project
     if not project.is_dir():
@@ -656,7 +675,8 @@ def main() -> int:
     out = []
     script_lines = []
     sheet_rows = []
-    flags = {"spec_seconds": spec_seconds}
+    script_format = read_script_format(project) if args.script_format == "auto" else args.script_format
+    flags = {"spec_seconds": spec_seconds, "script_format": script_format}
     total_scenes = 0
     for ep_no, path in eps:
         scs = check_episode(ep_no, path, wl, people, props, has_assets, out, flags, labels)
@@ -696,7 +716,7 @@ def main() -> int:
         print(f"  [{f['level']}] {f['file']} {f['scene']} · {f['kind']}：{f['msg']}")
     if args.json:
         args.json.write_text(json.dumps(
-            {"episodes": [p.name for _, p in eps], "fail": len(fails),
+            {"episodes": [p.name for _, p in eps], "script_format": script_format, "fail": len(fails),
              "warn": len(warns), "findings": out}, ensure_ascii=False, indent=2),
             encoding="utf-8")
     return 1 if (fails or (args.strict and warns)) else 0
