@@ -40,6 +40,8 @@ metadata:
    不因允许摄影说明而跳过这些检查。
 3. **逐场通读**：机械项过了再读内容。按 [audit-checklist.md](references/audit-checklist.md)
    B／C／D 三类逐场过——连续性、接缝、台词，这三类只能读出来。
+   需要审查平淡、钩子或追看动力时，另读 [dramatic-momentum.md](references/dramatic-momentum.md)，
+   按清单 F 类举证；机械通过不能代替吸引力判断，也不能用固定反转数或时间点判好坏。
 4. **写审查记录**：按 [review-ledger.md](references/review-ledger.md) 落盘到 `审查/`，
    一行一条 finding，必须带原文证据与影响。
 5. **收口**：复审只审①上一轮 FAIL 的原位置、②改动波及范围、③已关闭项有没有回退。

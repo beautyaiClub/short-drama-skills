@@ -43,6 +43,8 @@ metadata:
 2. **写一集**：读 [references/format-spec.md](references/format-spec.md) 与
    [references/write-checklist.md](references/write-checklist.md)，然后写 `第N集.txt`。
    写之前先把这一集的数值／道具／伤情／时间账对齐整体大纲。
+   每集写完按 [references/dramatic-momentum.md](references/dramatic-momentum.md) 做推进自检：检查开场正在发生的压力、
+   改变策略的升级、选择后果、行动中的关系变化与结尾未结问题。不要用增加运镜或微表情代替改戏。
 
 3. **生成派生件**（不许手写、不许手改）
 

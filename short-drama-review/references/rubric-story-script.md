@@ -21,6 +21,17 @@
 
 ## Episode shape
 
+- For a flatness or continued-viewing review, separate visual novelty, active present
+  pressure, and a viewer's unresolved question. Cite where the problem begins and what
+  changes; neither a new camera move nor an added microexpression is a story turn.
+- In a long procedural sequence, which steps alter strategy, cost, or relationship?
+  Equal emphasis on every correct operation can flatten a sequence with real events.
+- Does the last operation matter through a person's unresolved outcome, or merely
+  hand production a next task? A quiet consequence or deliberate afterimage can be
+  a valid ending; do not require another accident or a fixed cliffhanger template.
+- If a clue moves earlier, check the next entry and original reveal: does the later
+  appearance add location, identity, actionability, or explanatory constraints?
+  A possible signal is not proof of the sender or survival. Preserve evidence limits.
 - What pressure is active at the opening?
 - What does the protagonist want now, and what resists it?
 - Which choice/action causes the directional turn?

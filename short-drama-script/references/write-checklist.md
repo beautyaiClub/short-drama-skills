@@ -54,6 +54,11 @@
 
 ## 四、写完之后（收口）
 
+先按 [dramatic-momentum.md](dramatic-momentum.md) 做推进自检：
+开场的异常或欲望是否已进入；长操作段是否改变策略与关系；主动选择是否留下后果；
+结尾是否既兑现局部回报又留下观众在乎的结果。静戏无需强加事故，升级也不靠固定反转次数。
+把线索前移后，核对相邻集和原兑现集的信息增量，不能让后集重复发现。
+
 1. 生成派生件：`python3 scripts/build_derived_docs.py <项目目录>`（不许手写派生件）。
 2. 跑门禁：`$short-drama-script-audit` 的 `scripts/audit_plain_script.py <项目目录>`，FAIL 必须为 0。
 3. 交审查：记录落 `审查/`，**每次审查一个新文件**，不覆盖旧记录。
