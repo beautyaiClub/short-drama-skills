@@ -119,3 +119,11 @@ metadata:
 三份与写作 skill 同源的 `references/format-spec.md`、`references/project-layout.md`、
 `references/timing-model.md` 必须一起改；
 脚本会做 hash 比对，漂移会在 P 类检查里报出来。
+
+
+## 按需交付的全集 TXT
+
+用户要求清洁阅读版全集时，按 [project-layout.md §5.1](references/project-layout.md) 复核：
+顶部概要与人物一览符合当前故事；后续只有顺序集头及完整场正文，不混入分集概要／制作元信息。
+用写作 skill 的 `scripts/build_complete_script.py ... --check` 比对当前前言与单集正本；
+场内摄影、表演、声音及对白不得丢失。此项不要求所有项目都增加全集，合并正确也不表示剧情审查通过。
