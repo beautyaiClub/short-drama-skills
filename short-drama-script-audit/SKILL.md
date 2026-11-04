@@ -40,6 +40,9 @@ metadata:
    不因允许摄影说明而跳过这些检查。
 3. **逐场通读**：机械项过了再读内容。按 [audit-checklist.md](references/audit-checklist.md)
    B／C／D 三类逐场过——连续性、接缝、台词，这三类只能读出来。
+   接缝专项及导演整合稿增补后的复核须读 [接缝与动作顺序](references/continuity-seams.md)：
+   核对未完问答、时间承载、离场后返回、道具持有与反应触发顺序，并检查补写段落造成的动作重演。
+   机械FAIL 0、合集与正本一致，只是格式与对账证据，不能据此签发连续性通过。
    需要审查平淡、钩子或追看动力时，另读 [dramatic-momentum.md](references/dramatic-momentum.md)，
    按清单 F 类举证；机械通过不能代替吸引力判断，也不能用固定反转数或时间点判好坏。
 4. **写审查记录**：按 [review-ledger.md](references/review-ledger.md) 落盘到 `审查/`，
